@@ -72,6 +72,10 @@ Edge Functions 使用 TypeScript 與 Deno runtime，可從 Supabase CLI 建立�
 
 Vercel 外部部署不會自動沿用目前 Manus 內建的 project secrets、資料庫 migration 或預覽環境；這些都必須在 Supabase、Vercel 與 GitHub 各自重新設定。正式環境只應使用本 repository 的 Vite 前端、Supabase Auth/PostgreSQL/Storage 與 LINE Edge Function，不應設定或依賴 Manus OAuth、Express、tRPC、MySQL 或 SMTP。
 
+## 十一、集合列印功能
+
+學校行政角色的列印中心現在提供三種真正的資料集合列印：單月、單學期與全部請假紀錄。單月依請假區間與指定月份是否重疊篩選；學期依合約年度切分為 8 月 1 日至翌年 1 月 31 日的上學期，以及 2 月 1 日至 7 月 31 日的下學期；全部列印則使用目前權限範圍內的完整紀錄。每筆請假卡會在列印版面自動分頁，避免只列印第一筆資料。
+
 ## References
 
 [1]: https://vercel.com/docs/git/vercel-for-github "Deploying GitHub Projects with Vercel"
