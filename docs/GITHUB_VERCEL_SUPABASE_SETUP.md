@@ -43,7 +43,7 @@ Supabase Auth 會發行 JWT，並可與 PostgreSQL Row Level Security（RLS）�
 | 變數 | 用途 | 可否暴露至前端 |
 |---|---|---|
 | `VITE_SUPABASE_URL` | Supabase project URL | 可以 |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable/anon key | 可以，仍須依賴 RLS |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key | 可以，仍須依賴 RLS |
 | `VITE_APP_TITLE` | 網站標題 | 可以 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Edge Function 或 server-only 管理操作 | 不可以 |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API push token | 僅 Edge Function secret |
@@ -108,7 +108,7 @@ Vercel 外部部署不會自動沿用目前 Manus 內建的 project secrets、�
 
 本 repository 現已提供可審閱的 `supabase/migrations/202608280001_initial_leave_management.sql`，內容包含 PostgreSQL 業務表、`foreign_teacher_profiles` Auth role helper、RLS policies、private `foreign-teacher-leave-attachments` bucket 與 Storage policies。套用前請先在 Supabase project 建立備份，確認既有資料是否需要轉換，再執行 `supabase db push`；migration 以 `auth.uid()`、`foreign_teacher_profiles.role` 與 `public.foreign_teacher_can_access_application()` 作為權限邊界，前端隱藏按鈕不是安全控制。
 
-前端公開設定可由 `client/src/lib/supabase.ts` 讀取 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_PUBLISHABLE_KEY`，並以 `persistSession`、`autoRefreshToken`、`detectSessionInUrl` 管理 email/password session。缺少變數時會回傳未設定狀態，不會在 demo 預覽環境誤發出 Auth 請求。`supabase/functions/send-line-notification/index.ts` 是 LINE Messaging API Edge Function；請以 Supabase secrets 設定 `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`LINE_CINGSHAN_RECIPIENT_ID`、`LINE_DONGYUAN_RECIPIENT_ID` 與既有 `SUPABASE_SERVICE_ROLE_KEY`，再依通知佇列的 `notification_id` 呼叫。service role key 與 LINE secrets 不得進入 `VITE_` 變數。
+前端公開設定可由 `client/src/lib/supabase.ts` 讀取 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY`，並以 `persistSession`、`autoRefreshToken`、`detectSessionInUrl` 管理 email/password session。缺少變數時會回傳未設定狀態，不會在 demo 預覽環境誤發出 Auth 請求。`supabase/functions/send-line-notification/index.ts` 是 LINE Messaging API Edge Function；請以 Supabase secrets 設定 `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`LINE_CINGSHAN_RECIPIENT_ID`、`LINE_DONGYUAN_RECIPIENT_ID` 與既有 `SUPABASE_SERVICE_ROLE_KEY`，再依通知佇列的 `notification_id` 呼叫。service role key 與 LINE secrets 不得進入 `VITE_` 變數。
 
 ## 十、目前過渡邊界與切換順序
 
@@ -118,7 +118,7 @@ Vercel 外部部署不會自動沿用目前 Manus 內建的 project secrets、�
 
 ## 十一、Runtime switch 與角色消費流程
 
-當 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_PUBLISHABLE_KEY` 都存在時，App 會掛載 Supabase Auth session bridge；`useAuth()` 會把 Supabase session 映射為應用程式 identity，並停用 Manus `auth.me` query。Home 會在此模式啟用 Supabase leave query，將巢狀 `foreign_teacher_leave_days` 轉換為既有歷史／列印模型，並以 `app_metadata.role` 驅動 `teacher`、`cingshan` 或 `dongyuan` 流程。URL 的 `role` 只在 demo preview 使用，正式模式以登入 identity 為準。
+當 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY` 都存在時，App 會掛載 Supabase Auth session bridge；`useAuth()` 會把 Supabase session 映射為應用程式 identity，並停用 Manus `auth.me` query。Home 會在此模式啟用 Supabase leave query，將巢狀 `foreign_teacher_leave_days` 轉換為既有歷史／列印模型，並以 `app_metadata.role` 驅動 `teacher`、`cingshan` 或 `dongyuan` 流程。URL 的 `role` 只在 demo preview 使用，正式模式以登入 identity 為準。
 
 本次 repository 已加入 Home component、useAuth hook、Supabase adapter、附件 signed URL、通知 payload 與 Edge Function contract tests；最新驗證為 27 個 test files、90 項測試通過。仍需由部署者在自己的 Supabase project 執行 migration、建立 Auth users、匯入資料、部署 Edge Function，並以實際 RLS／LINE credentials 執行 runtime smoke test；正式送件與簽核資料 path 也應完成端到端驗證。
 
