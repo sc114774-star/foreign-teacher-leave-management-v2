@@ -29,7 +29,7 @@
 # Integration follow-ups
 
 - [ ] 將儀表板、申請、簽核、列印全面改接 Supabase 與資料庫，補齊 loading、empty、error states（儀表板/申請/簽核已完成；列印篩選仍待補）
-- [x] 把 requiresAttachment、routeSchool、splitLeaveDays 串入真正的送單與核准流程（Home submit 已執行附件必要性、逐日路由與混校阻擋，並寫入 leave_days）
+- [x] 把 requiresAttachment、routeSchool、splitLeaveDays 串入真正的送單與核准流程（Home submit 已執行附件必要性、逐日路由與混校阻擋，並寫入 foreign_teacher_leave_days）
 - [x] 實作後端角色權限、學校資料隔離與核准後扣額（leave router 已加入本校分派驗證與核准扣額）
 - [x] 完成寒暑假設定 CRUD 與完整日期區間拆單（設定 CRUD、逐日 route 驗證與混校阻擋已完成）
 - [ ] 完成真實列印篩選與資料驅動假卡欄位（單筆已完成；單月/學期/全部篩選待補）
@@ -138,7 +138,7 @@
 - [x] 建立可執行的 Supabase PostgreSQL schema、RLS policies、Auth role helper 與 private Storage policy migration
 - [x] 建立 Supabase browser client 與 email/password Auth session 適配層
 - [x] 建立 Supabase data-access contract，涵蓋請假、分派、簽核、額度與附件 signed URL
-- [x] 補上 leave_notifications 的 Queued／Sent／Failed 寫入與寄送結果紀錄（Supabase adapter 與 LINE Edge Function 已完成；實際部署 smoke test 由部署者執行）
+- [x] 補上 foreign_teacher_leave_notifications 的 Queued／Sent／Failed 寫入與寄送結果紀錄（Supabase adapter 與 LINE Edge Function 已完成；實際部署 smoke test 由部署者執行）
 - [x] 建立 Supabase Edge Function 的 Gmail SMTP 交接範本與 secrets 說明
 - [x] 補齊 Supabase migration、Auth、Storage、通知與 Vercel build 的驗證測試或腳本
 
@@ -146,37 +146,37 @@
 
 - [x] 為 Supabase data-access adapter 補上 approve/reject helper 與對應型別／測試
 - [x] 補上 Supabase attachment signed URL helper 與附件權限 contract 測試
-- [x] 補上 Supabase leave_days routing 寫入／讀取 contract 與測試
-- [x] 為 Edge Function、Storage 與 leave_notifications 新增可執行 contract test 或 invocation script（migration／lifecycle contracts 已納入 CI；Edge runtime invocation 仍需部署者執行）
+- [x] 補上 Supabase foreign_teacher_leave_days routing 寫入／讀取 contract 與測試
+- [x] 為 Edge Function、Storage 與 foreign_teacher_leave_notifications 新增可執行 contract test 或 invocation script（migration／lifecycle contracts 已納入 CI；Edge runtime invocation 仍需部署者執行）
 
 # Supabase notification integration corrections
 
-- [x] 將 Supabase 請假／簽核流程真正寫入 public.leave_notifications，讓 LINE Edge Function 使用同一份通知佇列（Home submit/decide 已接入 adapter）
+- [x] 將 Supabase 請假／簽核流程真正寫入 public.foreign_teacher_leave_notifications，讓 LINE Edge Function 使用同一份通知佇列（Home submit/decide 已接入 adapter）
 - [x] 為通知佇列補上送件／簽核 Queued、寄送成功 Sent、寄送失敗 Failed 測試（contract 與 Edge Function status transitions 已覆蓋；runtime invocation 由部署者執行）
 - [x] 在部署文件明確記錄目前 MySQL／tRPC 與 Supabase adapter 的過渡邊界，避免誤視為已完全切換
 
 # Supabase runtime coverage corrections
 
 - [x] 將 Supabase Auth client 實際接入前端登入／session 流程（App、useAuth、Home）並補上設定環境下的 session contract（useAuth 已消費 Supabase session；Home 透過 useAuth 取得 identity；Manus login 保留為過渡路徑）
-- [x] 為 decideSupabaseLeaveApplication 補上正向測試：本校可簽核、錯校拒絕、Pending 更新與 leave_approvals 寫入
+- [x] 為 decideSupabaseLeaveApplication 補上正向測試：本校可簽核、錯校拒絕、Pending 更新與 foreign_teacher_leave_approvals 寫入
 - [x] 為 getSupabaseAttachmentUrl 補上正向測試：關聯校驗、Storage signed URL 產生與未授權拒絕
-- [x] 為 Supabase leave_days routing adapter 補上讀寫 contract test
+- [x] 為 Supabase foreign_teacher_leave_days routing adapter 補上讀寫 contract test
 
 # Supabase routing read coverage correction
 
-- [x] 為 fetchSupabaseLeaveApplications 新增正向測試，驗證 leave_days 回傳包含 assigned_school、route_reason、hours 與日期資料
+- [x] 為 fetchSupabaseLeaveApplications 新增正向測試，驗證 foreign_teacher_leave_days 回傳包含 assigned_school、route_reason、hours 與日期資料
 
 # Supabase negative and payload coverage corrections
 
-- [x] 明確 assertion 驗證 leave_approvals insert payload 包含 application_id、school、approver_id、decision、note
+- [x] 明確 assertion 驗證 foreign_teacher_leave_approvals insert payload 包含 application_id、school、approver_id、decision、note
 - [x] 補測 Supabase decision=Rejected 路徑與通知佇列 payload
 - [x] 補測附件 application／attachment 關聯不符時拒絕
 - [x] 補測附件查詢或 Storage signed URL 被 RLS／權限拒絕時回傳錯誤
 
 # Notification payload assertion correction
 
-- [x] 為 Rejected 路徑補上 leave_notifications.insert payload assertion，驗證 application_id、recipient_type、recipient_ref、event_type 與 Queued status
-- [x] 為 Approved 路徑補上 leave_notifications.insert payload assertion，驗證教師收件人與 Queued status
+- [x] 為 Rejected 路徑補上 foreign_teacher_leave_notifications.insert payload assertion，驗證 application_id、recipient_type、recipient_ref、event_type 與 Queued status
+- [x] 為 Approved 路徑補上 foreign_teacher_leave_notifications.insert payload assertion，驗證教師收件人與 Queued status
 
 # Supabase auth consumer integration corrections
 

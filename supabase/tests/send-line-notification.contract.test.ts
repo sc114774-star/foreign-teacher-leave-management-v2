@@ -21,7 +21,7 @@ describe("send-line-notification Edge Function contract", () => {
   });
 
   it("prefers webhook-bound school recipients before secret fallbacks", () => {
-    expect(source).toContain("line_recipient_bindings");
+    expect(source).toContain("foreign_teacher_line_recipient_bindings");
     expect(source).toContain("line_group_id");
     expect(source).toContain("LINE_CINGSHAN_RECIPIENT_ID");
   });

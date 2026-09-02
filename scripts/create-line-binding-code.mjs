@@ -9,7 +9,7 @@ if (!["create", "list", "revoke"].includes(action)) throw new Error(usage);
 if (action === "create" && !["teacher", "cingshan", "dongyuan"].includes(target)) throw new Error(usage);
 if (action === "create" && target === "teacher" && !targetId) throw new Error("Teacher binding requires the Supabase auth user UUID.");
 if (!url || !serviceKey) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for binding management.");
-const endpoint = `${url.replace(/\\/$/, "")}/rest/v1/line_recipient_bindings`;
+const endpoint = `${url.replace(/\\/$/, "")}/rest/v1/foreign_teacher_line_recipient_bindings`;
 const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
 
 if (action === "list") {

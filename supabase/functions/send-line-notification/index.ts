@@ -17,7 +17,7 @@ type NotificationRow = {
   recipient_ref: string;
   event_type: "Submitted" | "Approved" | "Rejected";
   status: "Queued" | "Sent" | "Failed";
-  leave_applications: {
+  foreign_teacher_leave_applications: {
     application_no: string;
     leave_type: string;
     reason: string;
@@ -40,20 +40,20 @@ Deno.serve(async (request) => {
     if (!lineToken) throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not configured");
 
     const { data: notification, error: notificationError } = await supabaseAdmin
-      .from("leave_notifications")
-      .select("id, application_id, recipient_type, recipient_ref, event_type, status, leave_applications(application_no, leave_type, reason, teacher_id)")
+      .from("foreign_teacher_leave_notifications")
+      .select("id, application_id, recipient_type, recipient_ref, event_type, status, foreign_teacher_leave_applications(application_no, leave_type, reason, teacher_id)")
       .eq("id", notificationId)
       .single();
     if (notificationError || !notification) return json({ error: "Notification not found" }, 404);
 
     const row = notification as unknown as NotificationRow;
-    const { data: profile } = await supabaseAdmin.from("profiles").select("role").eq("user_id", userData.user.id).single();
+    const { data: profile } = await supabaseAdmin.from("foreign_teacher_profiles").select("role").eq("user_id", userData.user.id).single();
     const isAdmin = ["admin", "cingshan", "dongyuan"].includes(profile?.role ?? "");
-    if (!isAdmin && row.leave_applications.teacher_id !== userData.user.id) return json({ error: "Forbidden" }, 403);
+    if (!isAdmin && row.foreign_teacher_leave_applications.teacher_id !== userData.user.id) return json({ error: "Forbidden" }, 403);
     if (row.status === "Sent") return json({ ok: true, status: "Sent" });
 
     const recipientId = await resolveRecipientId(row);
-    const message = `外師請假通知\n申請編號：${row.leave_applications.application_no}\n假別：${row.leave_applications.leave_type}\n事由：${row.leave_applications.reason}\n狀態：${row.event_type}`;
+    const message = `外師請假通知\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}\n狀態：${row.event_type}`;
     const lineResponse = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { Authorization: `Bearer ${lineToken}`, "Content-Type": "application/json" },
@@ -61,18 +61,18 @@ Deno.serve(async (request) => {
     });
     if (!lineResponse.ok) throw new Error(`LINE push failed (${lineResponse.status}): ${await lineResponse.text()}`);
 
-    await supabaseAdmin.from("leave_notifications").update(sentNotificationUpdate(new Date().toISOString())).eq("id", row.id);
+    await supabaseAdmin.from("foreign_teacher_leave_notifications").update(sentNotificationUpdate(new Date().toISOString())).eq("id", row.id);
     return json({ ok: true, status: "Sent" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (notificationId) await supabaseAdmin.from("leave_notifications").update(failedNotificationUpdate(message)).eq("id", notificationId);
+    if (notificationId) await supabaseAdmin.from("foreign_teacher_leave_notifications").update(failedNotificationUpdate(message)).eq("id", notificationId);
     return json({ error: message }, 500);
   }
 });
 
 async function resolveRecipientId(row: NotificationRow) {
   if (row.recipient_type === "Teacher") return row.recipient_ref;
-  const binding = await supabaseAdmin.from("line_recipient_bindings").select("line_user_id, line_group_id").eq("school", row.recipient_ref).not("used_at", "is", null).order("used_at", { ascending: false }).limit(1).maybeSingle();
+  const binding = await supabaseAdmin.from("foreign_teacher_line_recipient_bindings").select("line_user_id, line_group_id").eq("school", row.recipient_ref).not("used_at", "is", null).order("used_at", { ascending: false }).limit(1).maybeSingle();
   if (!binding.error && binding.data) {
     const boundId = binding.data.line_group_id ?? binding.data.line_user_id;
     if (boundId) return boundId;

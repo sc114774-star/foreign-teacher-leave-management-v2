@@ -24,15 +24,15 @@ Deno.serve(async (request) => {
     const sourceGroupId = event.source?.groupId ?? null;
     const bindCode = event.message?.type === "text" ? event.message.text?.trim().match(/^\\/bind\\s+(\\S+)$/)?.[1] : undefined;
     if (bindCode && (sourceUserId || sourceGroupId)) {
-      const binding = await supabaseAdmin.from("line_recipient_bindings").select("id, profile_user_id, school").eq("binding_code", bindCode).is("used_at", null).maybeSingle();
+      const binding = await supabaseAdmin.from("foreign_teacher_line_recipient_bindings").select("id, profile_user_id, school").eq("binding_code", bindCode).is("used_at", null).maybeSingle();
       if (!binding.error && binding.data) {
         if (binding.data.profile_user_id && sourceUserId) {
-          await supabaseAdmin.from("profiles").update({ line_user_id: sourceUserId, updated_at: new Date().toISOString() }).eq("user_id", binding.data.profile_user_id);
+          await supabaseAdmin.from("foreign_teacher_profiles").update({ line_user_id: sourceUserId, updated_at: new Date().toISOString() }).eq("user_id", binding.data.profile_user_id);
         }
-        await supabaseAdmin.from("line_recipient_bindings").update({ line_user_id: sourceUserId, line_group_id: sourceGroupId, used_at: new Date().toISOString() }).eq("id", binding.data.id);
+        await supabaseAdmin.from("foreign_teacher_line_recipient_bindings").update({ line_user_id: sourceUserId, line_group_id: sourceGroupId, used_at: new Date().toISOString() }).eq("id", binding.data.id);
       }
     }
-    await supabaseAdmin.from("line_webhook_events").upsert({
+    await supabaseAdmin.from("foreign_teacher_line_webhook_events").upsert({
       webhook_event_id: event.webhookEventId,
       event_type: event.type ?? "unknown",
       line_user_id: sourceUserId,

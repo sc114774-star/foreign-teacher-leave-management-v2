@@ -13,7 +13,7 @@ describe("LINE webhook Edge Function contract", () => {
   });
 
   it("deduplicates webhook events and stores an audit payload server-side", () => {
-    expect(source).toContain("line_webhook_events");
+    expect(source).toContain("foreign_teacher_line_webhook_events");
     expect(source).toContain("webhook_event_id");
     expect(source).toContain("onConflict: \"webhook_event_id\"");
     expect(source).toContain("SUPABASE_SERVICE_ROLE_KEY");
@@ -21,8 +21,8 @@ describe("LINE webhook Edge Function contract", () => {
 
   it("supports one-time binding codes for teacher and school recipients", () => {
     expect(source).toContain("match(/^\\\\/bind\\\\s+(\\\\S+)$/)");
-    expect(source).toContain("line_recipient_bindings");
-    expect(source).toContain("profiles").toBeTruthy();
+    expect(source).toContain("foreign_teacher_line_recipient_bindings");
+    expect(source).toContain("foreign_teacher_profiles").toBeTruthy();
     expect(source).toContain("used_at");
     expect(source).toContain("line_group_id");
   });

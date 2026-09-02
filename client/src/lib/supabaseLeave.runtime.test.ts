@@ -24,14 +24,14 @@ import { createSupabaseLeaveApplication, decideSupabaseLeaveApplication, fetchSu
 describe("Supabase leave adapter runtime contracts", () => {
   beforeEach(() => { mockClient.from.mockReset(); mockClient.storage.from.mockClear(); });
 
-  it("reads routed leave_days with school, hours, date, and route reason", async () => {
+  it("reads routed foreign_teacher_leave_days with school, hours, date, and route reason", async () => {
     const routed = [{ id: 1, application_id: 42, leave_date: "2025-06-17", hours: 8, assigned_school: "青山國小", route_reason: "Tuesday → Cingshan" }];
-    mockClient.from.mockReturnValueOnce(makeChain([{ id: 42, application_no: "LV-RUNTIME-READ", leave_days: routed, leave_attachments: [] }]));
+    mockClient.from.mockReturnValueOnce(makeChain([{ id: 42, application_no: "LV-RUNTIME-READ", foreign_teacher_leave_days: routed, foreign_teacher_leave_attachments: [] }]));
     const result = await fetchSupabaseLeaveApplications();
-    expect(result[0].leave_days?.[0]).toMatchObject({ assigned_school: "青山國小", route_reason: "Tuesday → Cingshan", hours: 8, leave_date: "2025-06-17" });
+    expect(result[0].foreign_teacher_leave_days?.[0]).toMatchObject({ assigned_school: "青山國小", route_reason: "Tuesday → Cingshan", hours: 8, leave_date: "2025-06-17" });
   });
 
-  it("writes leave_days routing and queues the school notification on submission", async () => {
+  it("writes foreign_teacher_leave_days routing and queues the school notification on submission", async () => {
     mockClient.from
       .mockReturnValueOnce(makeChain({ id: 42 }))
       .mockReturnValueOnce(makeChain(null))
@@ -39,18 +39,18 @@ describe("Supabase leave adapter runtime contracts", () => {
     const applicationId = await createSupabaseLeaveApplication({
       application_no: "LV-RUNTIME-001", teacher_id: "teacher-1", leave_type: "PTO", reason: "test", official_document_no: null, official_location: null,
       start_at: "2025-06-17T00:00:00Z", end_at: "2025-06-17T08:00:00Z", total_hours: 8,
-      leave_days: [{ leave_date: "2025-06-17", hours: 8, assigned_school: "青山國小", route_reason: "Tuesday → Cingshan" }],
+      foreign_teacher_leave_days: [{ leave_date: "2025-06-17", hours: 8, assigned_school: "青山國小", route_reason: "Tuesday → Cingshan" }],
     });
     expect(applicationId).toBe(42);
-    expect(mockClient.from.mock.calls[1][0]).toBe("leave_days");
-    expect(mockClient.from.mock.calls[2][0]).toBe("leave_notifications");
+    expect(mockClient.from.mock.calls[1][0]).toBe("foreign_teacher_leave_days");
+    expect(mockClient.from.mock.calls[2][0]).toBe("foreign_teacher_leave_notifications");
   });
 
   it("creates a signed attachment URL only after application attachment matching", async () => {
     mockClient.from.mockReturnValueOnce(makeChain({ id: 7, file_name: "proof.pdf", mime_type: "application/pdf", storage_key: "7/proof.pdf" }));
     const result = await getSupabaseAttachmentUrl(7, 11);
     expect(result).toMatchObject({ id: 7, file_name: "proof.pdf", url: "https://signed.example/file" });
-    expect(mockClient.storage.from).toHaveBeenCalledWith("leave-attachments");
+    expect(mockClient.storage.from).toHaveBeenCalledWith("foreign-teacher-leave-attachments");
   });
 
   it("updates Pending and writes approval plus teacher notification for the assigned school", async () => {
@@ -72,7 +72,7 @@ describe("Supabase leave adapter runtime contracts", () => {
     expect((approvalChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 7, school: "青山國小", approver_id: "approver-1", decision: "Approved", note: null });
     expect((notificationChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 7, recipient_type: "Teacher", recipient_ref: "Uteacher123", event_type: "Approved", channel: "LINE", status: "Queued" });
     expect(mockClient.from).toHaveBeenCalledTimes(6);
-    expect(mockClient.from.mock.calls[5][0]).toBe("leave_notifications");
+    expect(mockClient.from.mock.calls[5][0]).toBe("foreign_teacher_leave_notifications");
   });
 
   it("writes a Rejected approval and teacher notification for the assigned school", async () => {
