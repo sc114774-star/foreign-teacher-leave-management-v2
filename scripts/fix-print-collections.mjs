@@ -1,0 +1,12 @@
+import fs from "node:fs";
+const path = "client/src/pages/Home.tsx";
+let source = fs.readFileSync(path, "utf8");
+source = source.replace(/\n  const availablePrintMonths = useMemo\(.*?\n  const academicYearStart = Number\(calendarSettings\.contractStart\.slice\(0, 4\)\);/s, "");
+source = source.replace("onPrint, onPreviewAttachment }: { records:", "onPrint, onCollectionPrint, onPreviewAttachment }: { records:");
+source = source.replace("onPrint: (record: LeaveRecord) => void; onPrintCollection: (scope: PrintScope) => void;", "onPrint: (record: LeaveRecord) => void; onCollectionPrint: (records: LeaveRecord[], title: string) => void;");
+source = source.replace('onPrint={setPrintRecord} onPreviewAttachment={onPreviewAttachment}', 'onPrint={setPrintRecord} onCollectionPrint={(collection, title) => setPrintCollection({ records: collection, title })} onPreviewAttachment={onPreviewAttachment}');
+const controls = "  const availablePrintMonths = useMemo(() => Array.from(new Set(records.flatMap((record) => { const months: string[] = []; const cursor = new Date(record.startDate + 'T12:00:00'); const end = new Date(record.endDate + 'T12:00:00'); while (cursor <= end) { months.push(cursor.toISOString().slice(0, 7)); cursor.setMonth(cursor.getMonth() + 1); } return months; }))).sort(), [records]);\n  const [printMonth, setPrintMonth] = useState(availablePrintMonths[0] ?? '2025-06');\n  const [printTerm, setPrintTerm] = useState('first');\n  const academicYearStart = Number(calendarSettings.contractStart.slice(0, 4));\n";
+source = source.replace('  if (active === "Settings") return', controls + '  if (active === "Settings") return');
+const handler = "  const onPrintCollection = (scope: PrintScope) => { const collection = scope === 'month' ? filterRecordsByMonth(filtered, printMonth) : scope === 'term' ? filterRecordsByTerm(filtered, printTerm, academicYearStart) : filtered; const title = scope === 'month' ? printMonth.replace('-', ' / ') + ' 月請假紀錄 · Monthly Leave Records' : scope === 'term' ? academicYearStart + ' 學年度' + (printTerm === 'first' ? '上' : '下') + '學期請假紀錄 · Semester Leave Records' : '全部請假紀錄 · All Leave Records'; onCollectionPrint(collection, title); };";
+source = source.replace('  const allRecords = records;', '  const allRecords = records;\n' + handler);
+fs.writeFileSync(path, source);

@@ -1,0 +1,19 @@
+import fs from "node:fs";
+const path = "/home/ubuntu/foreign-teacher-leave-management/client/src/pages/Home.tsx";
+let source = fs.readFileSync(path, "utf8");
+source = source.replace('onSubmit={() => { setShowForm(false); handleAction("Application submitted · 已送出申請，LINE 通知已排程"); }}', 'onSubmit={() => { setShowForm(false); handleAction("Application submitted · 已送出申請，LINE 通知已排程"); }}');
+source = source.replace('onClick={onSubmit}', 'onClick={() => onSubmit("regular")}');
+const settings = `function SchoolSettings({ role, onAction }: { role: Role; onAction: (message: string) => void }) {
+  const isPrimary = role === "cingshan";
+  const [contractStart, setContractStart] = useState("2025-08-01");
+  const [contractEnd, setContractEnd] = useState("2026-07-31");
+  const [summerStart, setSummerStart] = useState("2025-07-01");
+  const [summerEnd, setSummerEnd] = useState("2025-08-31");
+  const [winterStart, setWinterStart] = useState("2026-01-21");
+  const [winterEnd, setWinterEnd] = useState("2026-02-10");
+  return <div className="space-y-6"><div><p className="text-sm font-medium text-[#7f8d82]">主聘校設定 · Primary school settings</p><h2 className="mt-2 text-3xl font-semibold tracking-[-0.03em]">Academic calendar & contract<span className="text-[#a6b6a2]">.</span></h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#8b948c]">青山國小管理本年度計畫合約與寒暑假期間；東原國中可查看設定，但無法修改。</p></div>{!isPrimary && <Card className="border-[#e3d7b8] bg-[#fffaf0]"><CardContent className="flex items-start gap-3 p-5 text-sm text-[#8b733f]"><ShieldCheck className="mt-0.5 h-5 w-5" /><p>唯讀模式 · Read-only mode<br /><span className="text-xs">Only Cingshan Elementary can edit these dates.</span></p></CardContent></Card>}<Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]"><CardHeader><CardTitle className="text-lg">本年度計畫合約期間 · Contract period</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2"><label className="space-y-2 text-sm font-medium text-[#58655d]">開始日期 · Start date<Input type="date" value={contractStart} disabled={!isPrimary} onChange={(e) => setContractStart(e.target.value)} className="h-11 bg-white" /></label><label className="space-y-2 text-sm font-medium text-[#58655d]">結束日期 · End date<Input type="date" value={contractEnd} disabled={!isPrimary} onChange={(e) => setContractEnd(e.target.value)} className="h-11 bg-white" /></label></CardContent></Card><Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]"><CardHeader><CardTitle className="text-lg">寒暑假日期區間 · Vacation periods</CardTitle></CardHeader><CardContent className="grid gap-5 sm:grid-cols-2"><label className="space-y-2 text-sm font-medium text-[#58655d]">暑假開始 · Summer start<Input type="date" value={summerStart} disabled={!isPrimary} onChange={(e) => setSummerStart(e.target.value)} className="h-11 bg-white" /></label><label className="space-y-2 text-sm font-medium text-[#58655d]">暑假結束 · Summer end<Input type="date" value={summerEnd} disabled={!isPrimary} onChange={(e) => setSummerEnd(e.target.value)} className="h-11 bg-white" /></label><label className="space-y-2 text-sm font-medium text-[#58655d]">寒假開始 · Winter start<Input type="date" value={winterStart} disabled={!isPrimary} onChange={(e) => setWinterStart(e.target.value)} className="h-11 bg-white" /></label><label className="space-y-2 text-sm font-medium text-[#58655d]">寒假結束 · Winter end<Input type="date" value={winterEnd} disabled={!isPrimary} onChange={(e) => setWinterEnd(e.target.value)} className="h-11 bg-white" /></label>{isPrimary && <div className="sm:col-span-2 flex justify-end"><Button className="rounded-xl bg-[#304b3b] hover:bg-[#41644f]" onClick={() => onAction("Settings saved · 合約與寒暑假設定已儲存")}>Save settings · 儲存設定</Button></div>}</CardContent></Card></div>;
+}
+
+`;
+if (!source.includes("function SchoolSettings")) source = source.replace("function SchoolView", settings + "function SchoolView");
+fs.writeFileSync(path, source);
