@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(new URL("../migrations/202608280001_initial_leave_management.sql", import.meta.url), "utf8");
+const ptoMigration = readFileSync(new URL("../migrations/202609020002_pto_settings.sql", import.meta.url), "utf8");
 
 describe("Supabase migration contract", () => {
   it("defines the leave domain and Auth role profile", () => {
@@ -23,6 +24,13 @@ describe("Supabase migration contract", () => {
     expect(migration).toContain("'foreign-teacher-leave-attachments', 'foreign-teacher-leave-attachments', false");
     expect(migration).toContain("create policy leave_storage_read on storage.objects");
     expect(migration).toContain("public.foreign_teacher_can_access_application((split_part(name, '/', 1))::bigint)");
+  });
+
+  it("defines per-teacher PTO settings and school-admin RLS", () => {
+    expect(ptoMigration).toContain("create table if not exists public.foreign_teacher_pto_settings");
+    expect(ptoMigration).toContain("unique (teacher_id, academic_year)");
+    expect(ptoMigration).toContain("foreign_teacher_pto_settings_manage");
+    expect(ptoMigration).toContain("public.foreign_teacher_current_role() in ('cingshan', 'admin')");
   });
 
   it("defines the notification queue lifecycle", () => {

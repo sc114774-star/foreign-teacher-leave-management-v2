@@ -21,6 +21,8 @@ export type SupabaseLeaveApplication = {
 export type SupabaseLeaveDay = { id: number; application_id: number; leave_date: string; hours: number; assigned_school: "青山國小" | "東原國中"; route_reason: string };
 export type SupabaseLeaveAttachment = { id: number; application_id: number; file_name: string; mime_type: string; uploaded_at: string };
 export type SupabaseLeaveBalance = { id: number; teacher_id: string; academic_year: string; leave_type: SupabaseLeaveApplication["leave_type"]; total_hours: number; approved_used_hours: number };
+export type SupabasePtoSetting = { id: number; teacher_id: string; academic_year: string; total_days: number; updated_by: string; created_at: string; updated_at: string };
+export type SupabaseTeacherProfile = { user_id: string; name: string | null; email: string | null; role: "teacher" | "cingshan" | "dongyuan" | "admin" };
 export type SupabaseLeaveDecision = { application_id: number; school: "青山國小" | "東原國中"; decision: "Approved" | "Rejected"; note?: string };
 export type SupabaseSignedAttachment = { id: number; file_name: string; mime_type: string; url: string };
 
@@ -41,6 +43,31 @@ export async function fetchSupabaseBalances(academicYear: string) {
   const result = await client.from("foreign_teacher_leave_balances").select("*").eq("academic_year", academicYear);
   if (result.error) throw result.error;
   return result.data as unknown as SupabaseLeaveBalance[];
+}
+
+export async function fetchSupabaseTeacherProfiles() {
+  const client = requireClient();
+  const result = await client.from("foreign_teacher_profiles").select("user_id, name, email, role").eq("role", "teacher").order("name", { ascending: true });
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseTeacherProfile[];
+}
+
+export async function fetchSupabasePtoSettings(academicYear: string, teacherId?: string) {
+  const client = requireClient();
+  let query = client.from("foreign_teacher_pto_settings").select("*").eq("academic_year", academicYear);
+  if (teacherId) query = query.eq("teacher_id", teacherId);
+  const result = await query.order("teacher_id", { ascending: true });
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabasePtoSetting[];
+}
+
+export async function upsertSupabasePtoSetting(input: { teacherId: string; academicYear: string; totalDays: number }) {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) throw new Error("Supabase Auth session is required");
+  const result = await client.from("foreign_teacher_pto_settings").upsert({ teacher_id: input.teacherId, academic_year: input.academicYear, total_days: input.totalDays, updated_by: auth.user.id }, { onConflict: "teacher_id,academic_year" }).select("*").single();
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabasePtoSetting;
 }
 
 export async function getSupabaseAttachmentUrl(applicationId: number, attachmentId: number, expiresIn = 300): Promise<SupabaseSignedAttachment> {

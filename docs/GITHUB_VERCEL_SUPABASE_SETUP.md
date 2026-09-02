@@ -125,3 +125,11 @@ Vercel 外部部署不會自動沿用目前 Manus 內建的 project secrets、�
 ### Home data-state contract
 
 Home 的 demo `leaveRecords` 僅可在明確的 preview query（例如 `?role=teacher`）或尚未建立登入 session 的未登入預覽使用。只要使用者已 authenticated，Supabase leave adapter 的空結果都必須顯示 `No leave records yet · 目前尚無請假紀錄`，不可回退至 demo 假單；載入中與查詢錯誤則分別顯示雙語 loading／error 狀態。這項規則避免預覽資料遮蔽正式資料庫問題，也讓部署者能在 Vercel Preview 與正式環境區分測試資料與真實資料。
+
+## 十二、Leave Balance 與 PTO 設定
+
+首頁的 Leave Balance 現在只把 PTO 視為有上限假別；PTO 總天數由 `foreign_teacher_pto_settings` 依外師與學年度個別設定。病假、事假與公假僅累計「已申請」天數，不顯示剩餘天數或進度條；遭退件的假單不列入年度累計。
+
+青山國小與 admin 角色可在設定頁為每位外師修改 PTO 年度總天數，外師只能讀取自己的 PTO 設定。請在 prefixed schema 後套用 `supabase/migrations/202609020002_pto_settings.sql`；若使用完整 SQL，`supabase/foreign_teacher_schema.sql` 已包含相同資料表與 RLS。
+
+請假表單會即時計算本次申請後的累計狀態。事假年度累計嚴格大於 7 日，或事假加病假年度累計嚴格大於 14 日時，會顯示「即將扣薪 · Will deduct salary」警告。PTO 超過個人剩餘額度時，送出按鈕會停用；正式環境仍應在後端或資料庫交易層再次驗證額度，前端檢查不能取代 RLS 或 server-side validation。
