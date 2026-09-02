@@ -62,7 +62,7 @@ create table public.foreign_teacher_makeup_days (
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (academic_year, makeup_date)
+  unique (academic_year, makeup_date, assigned_school)
 );
 
 create table public.foreign_teacher_leave_applications (
@@ -196,7 +196,7 @@ create policy profiles_admin_manage on public.foreign_teacher_profiles for all t
 create policy calendar_read_authenticated on public.foreign_teacher_school_calendar_settings for select to authenticated using (true);
 create policy calendar_primary_manage on public.foreign_teacher_school_calendar_settings for all to authenticated using (public.foreign_teacher_current_role() in ('cingshan','admin')) with check (public.foreign_teacher_current_role() in ('cingshan','admin'));
 create policy makeup_read_authenticated on public.foreign_teacher_makeup_days for select to authenticated using (true);
-create policy makeup_primary_manage on public.foreign_teacher_makeup_days for all to authenticated using (public.foreign_teacher_current_role() in ('cingshan','admin')) with check (public.foreign_teacher_current_role() in ('cingshan','admin'));
+create policy makeup_school_manage on public.foreign_teacher_makeup_days for all to authenticated using (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中')) with check (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中'));
 create policy applications_read_authorized on public.foreign_teacher_leave_applications for select to authenticated using (teacher_id = auth.uid() or public.foreign_teacher_current_role() in ('cingshan','dongyuan','admin'));
 create policy applications_teacher_insert on public.foreign_teacher_leave_applications for insert to authenticated with check (teacher_id = auth.uid() and public.foreign_teacher_current_role() in ('teacher','admin'));
 create policy applications_admin_update on public.foreign_teacher_leave_applications for update to authenticated using (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan')) with check (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan'));

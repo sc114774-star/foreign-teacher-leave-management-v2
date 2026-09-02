@@ -23,6 +23,7 @@ export type SupabaseLeaveAttachment = { id: number; application_id: number; file
 export type SupabaseLeaveBalance = { id: number; teacher_id: string; academic_year: string; leave_type: SupabaseLeaveApplication["leave_type"]; total_hours: number; approved_used_hours: number };
 export type SupabasePtoSetting = { id: number; teacher_id: string; academic_year: string; total_days: number; updated_by: string; created_at: string; updated_at: string };
 export type SupabaseTeacherProfile = { user_id: string; name: string | null; email: string | null; role: "teacher" | "cingshan" | "dongyuan" | "admin" };
+export type SupabaseMakeupDay = { id: number; academic_year: string; makeup_date: string; source_date: string | null; assigned_school: "青山國小" | "東原國中"; note: string | null; created_by: string; created_at: string; updated_at: string };
 export type SupabaseLeaveDecision = { application_id: number; school: "青山國小" | "東原國中"; decision: "Approved" | "Rejected"; note?: string };
 export type SupabaseSignedAttachment = { id: number; file_name: string; mime_type: string; url: string };
 
@@ -43,6 +44,30 @@ export async function fetchSupabaseBalances(academicYear: string) {
   const result = await client.from("foreign_teacher_leave_balances").select("*").eq("academic_year", academicYear);
   if (result.error) throw result.error;
   return result.data as unknown as SupabaseLeaveBalance[];
+}
+
+export async function fetchSupabaseMakeupDays(school?: "青山國小" | "東原國中") {
+  const client = requireClient();
+  let query = client.from("foreign_teacher_makeup_days").select("*").order("makeup_date", { ascending: true });
+  if (school) query = query.eq("assigned_school", school);
+  const result = await query;
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseMakeupDay[];
+}
+
+export async function upsertSupabaseMakeupDay(input: { academicYear: string; date: string; sourceDate?: string; school: "青山國小" | "東原國中"; note?: string }) {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) throw new Error("Supabase Auth session is required");
+  const result = await client.from("foreign_teacher_makeup_days").upsert({ academic_year: input.academicYear, makeup_date: input.date, source_date: input.sourceDate ?? null, assigned_school: input.school, note: input.note ?? null, created_by: auth.user.id, updated_at: new Date().toISOString() }, { onConflict: "academic_year,makeup_date,assigned_school" }).select("*").single();
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseMakeupDay;
+}
+
+export async function deleteSupabaseMakeupDay(input: { academicYear: string; date: string; school: "青山國小" | "東原國中" }) {
+  const client = requireClient();
+  const result = await client.from("foreign_teacher_makeup_days").delete().eq("academic_year", input.academicYear).eq("makeup_date", input.date).eq("assigned_school", input.school);
+  if (result.error) throw result.error;
 }
 
 export async function fetchSupabaseTeacherProfiles() {
