@@ -1,49 +1,47 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import Login from "@/pages/Login";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import { useSupabaseAuth } from "./_core/hooks/useSupabaseAuth";
+import { useAuth } from "./_core/hooks/useAuth";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
-  return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
-  );
+  return <Switch>
+    <Route path="/" component={Home} />
+    <Route path="/404" component={NotFound} />
+    <Route component={NotFound} />
+  </Switch>;
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
+function AuthenticatedRouter() {
+  const auth = useAuth();
+  const [location, navigate] = useLocation();
+  const isLoginRoute = location === "/login";
 
-function SupabaseSessionBridge() {
-  useSupabaseAuth();
-  return null;
+  useEffect(() => {
+    if (auth.loading) return;
+    if (!auth.isAuthenticated && !isLoginRoute) navigate("/login");
+    if (auth.isAuthenticated && isLoginRoute) navigate("/");
+  }, [auth.isAuthenticated, auth.loading, isLoginRoute, navigate]);
+
+  if (auth.loading) return <div className="flex min-h-screen items-center justify-center bg-[#f7f5f0] text-sm text-[#718076]">正在確認登入狀態 · Checking session…</div>;
+  if (!auth.isAuthenticated) return <Login />;
+  return <Router />;
 }
 
 function App() {
-  return (
-    <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
-        <TooltipProvider>
-          <SupabaseSessionBridge />
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary>
+    <ThemeProvider defaultTheme="light">
+      <TooltipProvider>
+        <Toaster />
+        <AuthenticatedRouter />
+      </TooltipProvider>
+    </ThemeProvider>
+  </ErrorBoundary>;
 }
 
 export default App;

@@ -129,8 +129,7 @@ function toLeaveRecord(row: { application: { id: number; applicationNo: string; 
   return { id: row.application.applicationNo, startDate: start.replace(/\//g, "-"), endDate: end.replace(/\//g, "-"), applicationId: row.application.id, type: row.application.leaveType, typeZh, dates, hours: Number(row.application.totalHours), school: firstDay?.assignedSchool ?? "青山國小", status: row.application.status, reason: row.application.reason, route: firstDay?.routeReason ?? "Database route", applicant: "Lavinia Cruz", department: "Academic Affairs", jobTitle: "Foreign Nationality English Teacher", officialDocument: row.application.officialDocumentNo ?? "—", location: row.application.officialLocation ?? "—", ptoUsedDays: 0, sickPersonalUsedDays: 0, attachments: row.attachments };
 }
 
-export function resolveHomeRole({ isDemoPreview, requestedRole, identityRole }: { isDemoPreview: boolean; requestedRole: string | null; identityRole: Role }): Role {
-  if (isDemoPreview && (requestedRole === "cingshan" || requestedRole === "dongyuan")) return requestedRole;
+export function resolveHomeRole(identityRole: Role): Role {
   return identityRole;
 }
 
@@ -219,29 +218,20 @@ function LeaveCardPrint({ record, onClose }: { record: LeaveRecord; onClose: () 
 
 export default function Home() {
   const auth = useAuth();
-  const isDemoPreview = new URLSearchParams(window.location.search).has("role");
   const supabaseLeaveQuery = useQuery({ queryKey: ["supabase", "leave-applications", auth.user?.id], queryFn: fetchSupabaseLeaveApplications, enabled: Boolean(auth.user) && auth.supabaseConfigured, retry: false });
-  const liveRecords = auth.supabaseConfigured ? (supabaseLeaveQuery.data ?? []).map(toSupabaseLeaveRecord) : [];
-  const canUseDemoFallback = isDemoPreview || !auth.isAuthenticated;
-  const records = useMemo(() => liveRecords.length > 0 ? liveRecords : (canUseDemoFallback ? leaveRecords : []), [canUseDemoFallback, liveRecords]);
+  const records = useMemo(() => (supabaseLeaveQuery.data ?? []).map(toSupabaseLeaveRecord), [supabaseLeaveQuery.data]);
   const dataLoading = supabaseLeaveQuery.isLoading;
   const dataError = supabaseLeaveQuery.error;
-  const dataStateNotice = dataLoading ? "Loading leave records · 正在載入請假紀錄" : dataError ? "Unable to load leave records · 無法載入請假紀錄" : !canUseDemoFallback && liveRecords.length === 0 ? "No leave records yet · 目前尚無請假紀錄" : null;
-  const requestedRole = new URLSearchParams(window.location.search).get("role");
-  const identityRole = auth.user?.role === "cingshan" || auth.user?.role === "dongyuan" ? auth.user.role : "teacher";
-  const [role, setRole] = useState<Role>(() => resolveHomeRole({ isDemoPreview, requestedRole, identityRole }));
-  useEffect(() => {
-    if (!isDemoPreview && auth.user) setRole(identityRole);
-  }, [auth.user, identityRole, isDemoPreview]);
+  const dataStateNotice = dataLoading ? "Loading leave records · 正在載入請假紀錄" : dataError ? "Unable to load leave records · 無法載入請假紀錄" : !records.length ? "No leave records yet · 目前尚無請假紀錄" : null;
+  const identityRole: Role = auth.user?.role === "cingshan" ? "cingshan" : auth.user?.role === "dongyuan" ? "dongyuan" : "teacher";
+  const role = resolveHomeRole(identityRole);
+  const displayName = auth.user?.name ?? "Foreign Teacher";
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const [active, setActive] = useState("Dashboard");
-  const [showForm, setShowForm] = useState(() => new URLSearchParams(window.location.search).get("previewForm") === "1");
+  const [showForm, setShowForm] = useState(false);
   const [printRecord, setPrintRecord] = useState<LeaveRecord | null>(null);
   const [printCollection, setPrintCollection] = useState<{ records: LeaveRecord[]; title: string } | null>(null);
-  const [attachmentPreview, setAttachmentPreview] = useState<AttachmentSummary | null>(() => {
-    const previewMode = new URLSearchParams(window.location.search).get("previewAttachment");
-    if (previewMode === "download") return { id: "demo-att-zip", fileName: "研習補充資料.zip", mimeType: "application/zip" };
-    return previewMode === "1" ? leaveRecords.find((record) => record.attachments?.length)?.attachments?.[0] ?? null : null;
-  });
+  const [attachmentPreview, setAttachmentPreview] = useState<AttachmentSummary | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [dateRange, setDateRange] = useState({ start: "2025-06-09", end: "2025-06-10" });
   const [makeupDays, setMakeupDays] = useState<MakeupDay[]>(() => readStored("foreign-teacher-makeup-days", defaultMakeupDays));
@@ -278,14 +268,14 @@ export default function Home() {
   return <div className="min-h-screen bg-[#f7f5f0] text-[#27352f]">
     <div className="flex min-h-screen">
       <aside className={cn("fixed inset-y-0 left-0 z-40 w-[272px] border-r border-[#e8e3d9] bg-[#fbfaf7] px-5 py-6 transition-transform lg:static lg:translate-x-0 print:hidden", mobileNav ? "translate-x-0" : "-translate-x-full")}>
-        <div className="flex items-center gap-3 px-2"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#304b3b] text-white shadow-lg shadow-[#304b3b]/15"><GraduationCap className="h-6 w-6" /></div><div><p className="font-semibold tracking-tight">Cingshan · 青山</p><p className="text-[11px] uppercase tracking-[0.16em] text-[#9a9a90]">Leave Office</p></div></div>
-        <div className="mt-10 rounded-2xl bg-[#eef2ed] p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#809084]">Current workspace</p><div className="mt-3 flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8e2d6] text-sm font-bold text-[#47634e]">LC</div><div><p className="text-sm font-medium">Lavinia Cruz</p><p className="text-xs text-[#7f8b82]">Foreign Teacher</p></div></div></div>
+        <div className="flex items-center gap-3 px-2"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#304b3b] text-white shadow-lg shadow-[#304b3b]/15"><GraduationCap className="h-6 w-6" /></div><div><p className="font-semibold tracking-tight">外師差勤 · Leave Office</p><p className="text-[11px] uppercase tracking-[0.16em] text-[#9a9a90]">Leave Office</p></div></div>
+        <div className="mt-10 rounded-2xl bg-[#eef2ed] p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#809084]">Current workspace</p><div className="mt-3 flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8e2d6] text-sm font-bold text-[#47634e]">{initials}</div><div><p className="text-sm font-medium">{displayName}</p><p className="text-xs text-[#7f8b82]">{role === "teacher" ? "Foreign Teacher" : role === "cingshan" ? "Cingshan School Office" : "Dongyuan School Office"}</p></div></div></div>
         <nav className="mt-8 space-y-1">{navItems.map(({ key, zh, Icon }) => <button key={key} onClick={() => { setActive(key); setMobileNav(false); }} className={cn("flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm transition", active === key ? "bg-[#304b3b] text-white shadow-md shadow-[#304b3b]/10" : "text-[#7e847c] hover:bg-[#f0eee8] hover:text-[#304b3b]")}><span className="flex items-center gap-3"><Icon className="h-4 w-4" /><span>{zh}<span className={cn("ml-2 text-xs", active === key ? "text-white/65" : "text-[#adb0a8]")}>{key}</span></span></span>{active === key && <ChevronRight className="h-4 w-4" />}</button>)}</nav>
-        <div className="mt-auto hidden border-t border-[#e8e3d9] pt-5 lg:block"><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-[#8a8d86] hover:bg-[#f0eee8]"><ShieldCheck className="h-4 w-4" />帳號與權限 · Access</button><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-[#8a8d86] hover:bg-[#f0eee8]"><LogOut className="h-4 w-4" />登出 · Sign out</button></div>
+        <div className="mt-auto hidden border-t border-[#e8e3d9] pt-5 lg:block"><button className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-[#8a8d86] hover:bg-[#f0eee8]"><ShieldCheck className="h-4 w-4" />帳號與權限 · Access</button><button onClick={async () => { await auth.logout(); window.location.href = "/login"; }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-[#8a8d86] hover:bg-[#f0eee8]"><LogOut className="h-4 w-4" />登出 · Sign out</button></div>
       </aside>
       {mobileNav && <button aria-label="Close navigation" onClick={() => setMobileNav(false)} className="fixed inset-0 z-30 bg-[#27352f]/20 lg:hidden" />}
       <main className="min-w-0 flex-1 print:hidden">
-        <header className="flex h-[76px] items-center justify-between border-b border-[#e8e3d9] bg-[#fbfaf7]/80 px-5 backdrop-blur lg:px-10"><div className="flex items-center gap-3"><Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)}><Menu className="h-5 w-5" /></Button><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#a19f95]">114 Academic Year · 2025</p><h1 className="mt-1 text-xl font-semibold tracking-tight">{role === "teacher" ? "Good morning, Lavinia" : role === "cingshan" ? "青山國小 · School Office" : "東原國中 · School Office"}</h1></div></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-[#e5e1d7] bg-white px-3 py-2 text-xs text-[#858b83] sm:flex"><Users className="h-4 w-4 text-[#708d78]" /> Demo role <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="bg-transparent font-medium text-[#304b3b] outline-none"><option value="teacher">Foreign Teacher</option><option value="cingshan">Cingshan Elementary</option><option value="dongyuan">Dongyuan Junior High</option></select></div><button className="relative rounded-full p-2 text-[#8b928a] hover:bg-[#f0eee8]" onClick={() => handleAction("No new notifications · 目前沒有新通知")}><Bell className="h-5 w-5" /><span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#c58b74]" /></button><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9e3d6] text-xs font-bold text-[#47634e]">LC</div></div></header>
+        <header className="flex h-[76px] items-center justify-between border-b border-[#e8e3d9] bg-[#fbfaf7]/80 px-5 backdrop-blur lg:px-10"><div className="flex items-center gap-3"><Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNav(true)}><Menu className="h-5 w-5" /></Button><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#a19f95]">114 Academic Year · 2025</p><h1 className="mt-1 text-xl font-semibold tracking-tight">{role === "teacher" ? `Good morning, ${displayName}` : role === "cingshan" ? "青山國小 · School Office" : "東原國中 · School Office"}</h1></div></div><div className="flex items-center gap-3"><button className="relative rounded-full p-2 text-[#8b928a] hover:bg-[#f0eee8]" onClick={() => handleAction("No new notifications · 目前沒有新通知")}><Bell className="h-5 w-5" /><span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#c58b74]" /></button><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d9e3d6] text-xs font-bold text-[#47634e]">{initials}</div></div></header>
         <div className="mx-auto max-w-[1440px] px-5 py-8 lg:px-10">
           {(notice || dataStateNotice) && <div className={cn("mb-5 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm", dataError ? "border-[#e1b1a9] bg-[#fff1ed] text-[#a55045]" : "border-[#b7d1bb] bg-[#eef8f0] text-[#41714c]")}><Check className="h-4 w-4" />{notice || dataStateNotice}</div>}
           {role === "teacher" ? <>

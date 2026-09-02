@@ -80,14 +80,10 @@ describe("Home Supabase identity runtime consumer", () => {
     expect(screen.getByText("No leave records yet · 目前尚無請假紀錄")).toBeTruthy();
   });
 
-  it("only permits URL role override in demo preview", () => {
+  it("renders the authenticated user's identity without a demo role selector", () => {
     state.role = "teacher";
-    window.history.replaceState({}, "", "/?role=dongyuan");
-    render(<Home />);
-    expect(screen.getByText("東原國中 · School Office")).toBeTruthy();
-    cleanup();
-    window.history.replaceState({}, "", "/");
     render(<Home />);
     expect(screen.getByText("Good morning, Lavinia")).toBeTruthy();
+    expect(screen.queryByText("Demo role")).toBeNull();
   });
 });
