@@ -185,10 +185,24 @@
 }
 
 @media print {
-  body { background: #fff !important; }
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  html, body, #root {
+    width: 100% !important;
+    min-width: 0 !important;
+    background: #fff !important;
+  }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .print\:hidden { display: none !important; }
+  .print\:block { display: block !important; }
   .print\:static { position: static !important; }
-  @page { size: A4 portrait; margin: 12mm; }
+  .print\:w-full { width: 100% !important; max-width: none !important; }
+  .print-card { page-break-after: always; break-after: page; }
+  .print-card:last-child { page-break-after: auto; break-after: auto; }
+  table { page-break-inside: avoid; }
+  th, td { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
