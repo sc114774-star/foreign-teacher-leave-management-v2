@@ -196,6 +196,13 @@ create table if not exists public.foreign_teacher_pto_settings (
 );
 create index if not exists foreign_teacher_pto_settings_year_idx on public.foreign_teacher_pto_settings (academic_year);
 
+create table if not exists public.foreign_teacher_line_group_settings (
+  school text primary key check (school in ('青山國小', '東原國中')),
+  group_id text not null check (length(trim(group_id)) > 0),
+  updated_by uuid not null references auth.users(id),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.foreign_teacher_profiles enable row level security;
 alter table public.foreign_teacher_school_calendar_settings enable row level security;
 alter table public.foreign_teacher_makeup_days enable row level security;
@@ -208,6 +215,7 @@ alter table public.foreign_teacher_leave_routing_events enable row level securit
 alter table public.foreign_teacher_leave_notifications enable row level security;
 alter table public.foreign_teacher_line_webhook_events enable row level security;
 alter table public.foreign_teacher_pto_settings enable row level security;
+alter table public.foreign_teacher_line_group_settings enable row level security;
 
 create policy profiles_self_read on public.foreign_teacher_profiles for select to authenticated using (user_id = auth.uid());
 create policy profiles_admin_manage on public.foreign_teacher_profiles for all to authenticated using (public.foreign_teacher_current_role() = 'admin') with check (public.foreign_teacher_current_role() = 'admin');
@@ -233,6 +241,8 @@ create policy notifications_insert_authorized on public.foreign_teacher_leave_no
 create policy line_webhook_events_no_client_access on public.foreign_teacher_line_webhook_events for all to authenticated using (false) with check (false);
 create policy pto_settings_read on public.foreign_teacher_pto_settings for select to authenticated using (teacher_id = auth.uid() or public.foreign_teacher_current_role() in ('cingshan','admin'));
 create policy pto_settings_manage on public.foreign_teacher_pto_settings for all to authenticated using (public.foreign_teacher_current_role() in ('cingshan','admin')) with check (public.foreign_teacher_current_role() in ('cingshan','admin') and updated_by = auth.uid());
+create policy line_group_settings_read on public.foreign_teacher_line_group_settings for select to authenticated using (true);
+create policy line_group_settings_manage on public.foreign_teacher_line_group_settings for all to authenticated using (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and school = '東原國中')) with check (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and school = '東原國中'));
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('foreign-teacher-leave-attachments', 'foreign-teacher-leave-attachments', false, 10485760, array['application/pdf','image/jpeg','image/png','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/zip'])

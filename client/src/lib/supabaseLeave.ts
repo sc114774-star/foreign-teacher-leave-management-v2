@@ -24,6 +24,7 @@ export type SupabaseLeaveBalance = { id: number; teacher_id: string; academic_ye
 export type SupabasePtoSetting = { id: number; teacher_id: string; academic_year: string; total_days: number; updated_by: string; created_at: string; updated_at: string };
 export type SupabaseTeacherProfile = { user_id: string; name: string | null; email: string | null; role: "teacher" | "cingshan" | "dongyuan" | "admin" };
 export type SupabaseMakeupDay = { id: number; academic_year: string; makeup_date: string; source_date: string | null; assigned_school: "青山國小" | "東原國中"; note: string | null; created_by: string; created_at: string; updated_at: string };
+export type SupabaseLineGroupSetting = { school: "青山國小" | "東原國中"; group_id: string; updated_by: string; updated_at: string };
 export type SupabaseLeaveDecision = { application_id: number; school: "青山國小" | "東原國中"; decision: "Approved" | "Rejected"; note?: string };
 export type SupabaseSignedAttachment = { id: number; file_name: string; mime_type: string; url: string };
 
@@ -68,6 +69,22 @@ export async function deleteSupabaseMakeupDay(input: { academicYear: string; dat
   const client = requireClient();
   const result = await client.from("foreign_teacher_makeup_days").delete().eq("academic_year", input.academicYear).eq("makeup_date", input.date).eq("assigned_school", input.school);
   if (result.error) throw result.error;
+}
+
+export async function fetchSupabaseLineGroupSettings() {
+  const client = requireClient();
+  const result = await client.from("foreign_teacher_line_group_settings").select("school, group_id, updated_by, updated_at").order("school", { ascending: true });
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseLineGroupSetting[];
+}
+
+export async function upsertSupabaseLineGroupSetting(input: { school: "青山國小" | "東原國中"; groupId: string }) {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) throw new Error("Supabase Auth session is required");
+  const result = await client.from("foreign_teacher_line_group_settings").upsert({ school: input.school, group_id: input.groupId, updated_by: auth.user.id }, { onConflict: "school" }).select("school, group_id, updated_by, updated_at").single();
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseLineGroupSetting;
 }
 
 export async function fetchSupabaseTeacherProfiles() {
@@ -115,13 +132,6 @@ export async function decideSupabaseLeaveApplication(input: SupabaseLeaveDecisio
   if (update.error) throw update.error;
   const approval = await client.from("foreign_teacher_leave_approvals").insert({ application_id: input.application_id, school: input.school, approver_id: auth.user.id, decision: input.decision, note: input.note ?? null });
   if (approval.error) throw approval.error;
-  const application = await client.from("foreign_teacher_leave_applications").select("teacher_id").eq("id", input.application_id).single();
-  if (application.error) throw application.error;
-  const profile = await client.from("foreign_teacher_profiles").select("line_user_id").eq("user_id", application.data.teacher_id).single();
-  if (profile.error) throw profile.error;
-  if (!profile.data.line_user_id) throw new Error("Teacher LINE user ID is not configured");
-  const notification = await client.from("foreign_teacher_leave_notifications").insert({ application_id: input.application_id, recipient_type: "Teacher", recipient_ref: profile.data.line_user_id, event_type: input.decision, channel: "LINE", status: "Queued" });
-  if (notification.error) throw notification.error;
   return { applicationId: input.application_id, decision: input.decision };
 }
 

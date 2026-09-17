@@ -52,6 +52,10 @@ Deno.serve(async (request) => {
     if (!isAdmin && row.foreign_teacher_leave_applications.teacher_id !== userData.user.id) return json({ error: "Forbidden" }, 403);
     if (row.status === "Sent") return json({ ok: true, status: "Sent" });
 
+    if (row.event_type !== "Submitted" || row.recipient_type !== "SchoolMailbox") {
+      await supabaseAdmin.from("foreign_teacher_leave_notifications").update({ status: "Sent", sent_at: new Date().toISOString(), error_message: null }).eq("id", row.id);
+      return json({ ok: true, status: "Skipped", reason: "Only new submissions are pushed to school groups" });
+    }
     const recipientId = await resolveRecipientId(row);
     const message = `外師請假通知\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}\n狀態：${row.event_type}`;
     const lineResponse = await fetch("https://api.line.me/v2/bot/message/push", {
@@ -71,21 +75,13 @@ Deno.serve(async (request) => {
 });
 
 async function resolveRecipientId(row: NotificationRow) {
-  if (row.recipient_type === "Teacher") return row.recipient_ref;
-  const binding = await supabaseAdmin.from("foreign_teacher_line_recipient_bindings").select("line_user_id, line_group_id").eq("school", row.recipient_ref).not("used_at", "is", null).order("used_at", { ascending: false }).limit(1).maybeSingle();
-  if (!binding.error && binding.data) {
-    const boundId = binding.data.line_group_id ?? binding.data.line_user_id;
-    if (boundId) return boundId;
-  }
-  if (row.recipient_ref === "青山國小") {
-    const id = Deno.env.get("LINE_CINGSHAN_RECIPIENT_ID");
-    if (id) return id;
-  }
-  if (row.recipient_ref === "東原國中") {
-    const id = Deno.env.get("LINE_DONGYUAN_RECIPIENT_ID");
-    if (id) return id;
-  }
-  throw new Error(`LINE recipient is not configured for ${row.recipient_ref}`);
+  if (row.recipient_type !== "SchoolMailbox") throw new Error("Teacher LINE notifications are disabled");
+  const configured = await supabaseAdmin.from("foreign_teacher_line_group_settings").select("group_id").eq("school", row.recipient_ref).maybeSingle();
+  if (!configured.error && configured.data?.group_id) return configured.data.group_id;
+  const envName = row.recipient_ref === "青山國小" ? "CINGSHAN_LINE_GROUP_ID" : "DONGYUAN_LINE_GROUP_ID";
+  const id = Deno.env.get(envName);
+  if (id) return id;
+  throw new Error(`${envName} is not configured for ${row.recipient_ref}`);
 }
 
 function json(body: unknown, status = 200) {

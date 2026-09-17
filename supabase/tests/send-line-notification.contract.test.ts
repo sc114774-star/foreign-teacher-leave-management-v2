@@ -7,8 +7,8 @@ describe("send-line-notification Edge Function contract", () => {
   it("uses LINE push API and server-side credentials", () => {
     expect(source).toContain("https://api.line.me/v2/bot/message/push");
     expect(source).toContain("LINE_CHANNEL_ACCESS_TOKEN");
-    expect(source).toContain("LINE_CINGSHAN_RECIPIENT_ID");
-    expect(source).toContain("LINE_DONGYUAN_RECIPIENT_ID");
+    expect(source).toContain("CINGSHAN_LINE_GROUP_ID");
+    expect(source).toContain("DONGYUAN_LINE_GROUP_ID");
     expect(source).not.toContain("nodemailer");
     expect(source).not.toContain("SMTP_APP_PASSWORD");
   });
@@ -20,9 +20,10 @@ describe("send-line-notification Edge Function contract", () => {
     expect(source).toContain("notificationId");
   });
 
-  it("prefers webhook-bound school recipients before secret fallbacks", () => {
-    expect(source).toContain("foreign_teacher_line_recipient_bindings");
-    expect(source).toContain("line_group_id");
-    expect(source).toContain("LINE_CINGSHAN_RECIPIENT_ID");
+  it("resolves school groups from the database before environment fallbacks", () => {
+    expect(source).toContain("foreign_teacher_line_group_settings");
+    expect(source).toContain("CINGSHAN_LINE_GROUP_ID");
+    expect(source).toContain("DONGYUAN_LINE_GROUP_ID");
+    expect(source).toContain('row.event_type !== "Submitted"');
   });
 });

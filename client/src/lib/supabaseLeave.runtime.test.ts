@@ -53,41 +53,29 @@ describe("Supabase leave adapter runtime contracts", () => {
     expect(mockClient.storage.from).toHaveBeenCalledWith("foreign-teacher-leave-attachments");
   });
 
-  it("updates Pending and writes approval plus teacher notification for the assigned school", async () => {
+  it("updates Pending and writes approval without teacher notification for the assigned school", async () => {
     const updateChain = makeChain(null);
     const approvalChain = makeChain(null);
-    const notificationChain = makeChain(null);
-    const applicationChain = makeChain({ teacher_id: "teacher-1" });
-    const profileChain = makeChain({ line_user_id: "Uteacher123" });
     mockClient.from
       .mockReturnValueOnce(makeChain([{ assigned_school: "青山國小" }]))
       .mockReturnValueOnce(updateChain)
-      .mockReturnValueOnce(approvalChain)
-      .mockReturnValueOnce(applicationChain)
-      .mockReturnValueOnce(profileChain)
-      .mockReturnValueOnce(notificationChain);
+      .mockReturnValueOnce(approvalChain);
     const result = await decideSupabaseLeaveApplication({ application_id: 7, school: "青山國小", decision: "Approved" });
     expect(result).toEqual({ applicationId: 7, decision: "Approved" });
     expect(updateChain.update).toHaveBeenCalledWith({ status: "Approved" });
     expect((approvalChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 7, school: "青山國小", approver_id: "approver-1", decision: "Approved", note: null });
-    expect((notificationChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 7, recipient_type: "Teacher", recipient_ref: "Uteacher123", event_type: "Approved", channel: "LINE", status: "Queued" });
-    expect(mockClient.from).toHaveBeenCalledTimes(6);
-    expect(mockClient.from.mock.calls[5][0]).toBe("foreign_teacher_leave_notifications");
+    expect(mockClient.from).toHaveBeenCalledTimes(3);
   });
 
-  it("writes a Rejected approval and teacher notification for the assigned school", async () => {
+  it("writes a Rejected approval without teacher notification for the assigned school", async () => {
     const approvalChain = makeChain(null);
-    const notificationChain = makeChain(null);
     mockClient.from
       .mockReturnValueOnce(makeChain([{ assigned_school: "東原國中" }]))
       .mockReturnValueOnce(makeChain(null))
-      .mockReturnValueOnce(approvalChain)
-      .mockReturnValueOnce(makeChain({ teacher_id: "teacher-1" }))
-      .mockReturnValueOnce(makeChain({ line_user_id: "Uteacher123" }))
-      .mockReturnValueOnce(notificationChain);
+      .mockReturnValueOnce(approvalChain);
     await decideSupabaseLeaveApplication({ application_id: 8, school: "東原國中", decision: "Rejected", note: "Please revise" });
     expect((approvalChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 8, school: "東原國中", approver_id: "approver-1", decision: "Rejected", note: "Please revise" });
-    expect((notificationChain.insert as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith({ application_id: 8, recipient_type: "Teacher", recipient_ref: "Uteacher123", event_type: "Rejected", channel: "LINE", status: "Queued" });
+    expect(mockClient.from).toHaveBeenCalledTimes(3);
   });
 
   it("rejects a decision when every leave day is not assigned to the current school", async () => {

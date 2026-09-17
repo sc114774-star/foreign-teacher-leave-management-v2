@@ -48,8 +48,8 @@ Supabase Auth 會發行 JWT，並可與 PostgreSQL Row Level Security（RLS）�
 | `SUPABASE_SERVICE_ROLE_KEY` | Edge Function 或 server-only 管理操作 | 不可以 |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API push token | 僅 Edge Function secret |
 | `LINE_CHANNEL_SECRET` | LINE webhook signature secret | 僅 Edge Function secret |
-| `LINE_CINGSHAN_RECIPIENT_ID` | 青山國小行政群組／使用者 ID | 僅 Edge Function secret |
-| `LINE_DONGYUAN_RECIPIENT_ID` | 東原國中行政群組／使用者 ID | 僅 Edge Function secret |
+| `CINGSHAN_LINE_GROUP_ID` | 青山國小行政群組 ID | 僅 Edge Function secret；也可由管理設定頁寫入 prefixed table |
+| `DONGYUAN_LINE_GROUP_ID` | 東原國中行政群組 ID | 僅 Edge Function secret；也可由管理設定頁寫入 prefixed table |
 
 Vercel 與 Supabase 可透過整合自動同步部分環境變數；也可依官方流程由 Vercel import project，再在本機使用 `vercel env pull` 取得本機開發設定。[2] 前端公開 key 不是安全邊界，RLS 才是安全邊界。
 
@@ -60,13 +60,19 @@ Vercel 與 Supabase 可透過整合自動同步部分環境變數；也可依官
 ```bash
 supabase init
 supabase functions new send-line-notification
-supabase secrets set LINE_CHANNEL_ACCESS_TOKEN=<LINE_CHANNEL_ACCESS_TOKEN> LINE_CHANNEL_SECRET=<LINE_CHANNEL_SECRET> LINE_CINGSHAN_RECIPIENT_ID=<CINGSHAN_GROUP_OR_USER_ID> LINE_DONGYUAN_RECIPIENT_ID=<DONGYUAN_GROUP_OR_USER_ID>
+supabase secrets set LINE_CHANNEL_ACCESS_TOKEN=<LINE_CHANNEL_ACCESS_TOKEN> LINE_CHANNEL_SECRET=<LINE_CHANNEL_SECRET> CINGSHAN_LINE_GROUP_ID=<CINGSHAN_GROUP_ID> DONGYUAN_LINE_GROUP_ID=<DONGYUAN_GROUP_ID>
 supabase functions deploy send-line-notification
 ```
 
-Edge Functions 使用 TypeScript 與 Deno runtime，可從 Supabase CLI 建立、測試、部署及呼叫。[3] Edge Function 接收 `notification_id`，從資料庫查詢事件與 recipient，再呼叫 LINE Messaging API push endpoint。只有 Edge Function 讀取 service role key 與 LINE channel access token；瀏覽器只呼叫受 Auth 保護的 function endpoint。LINE webhook 會以 channel secret 驗證 `x-line-signature`，並接受一次性 `/bind CODE` 指令。先以 `node scripts/create-line-binding-code.mjs teacher <AUTH_USER_UUID>` 或 `node scripts/create-line-binding-code.mjs cingshan`／`dongyuan` 產生 SQL，在 Supabase SQL Editor 執行後，再從對應 LINE 帳號或群組送出 `/bind CODE`；確認 `used_at` 與 `foreign_teacher_profiles.line_user_id` 或 `line_group_id` 更新後，才測試通知推播。
+Edge Functions 使用 TypeScript 與 Deno runtime，可從 Supabase CLI 建立、測試、部署及呼叫。[3] Edge Function 接收 `notification_id`，從資料庫查詢事件與 recipient，再呼叫 LINE Messaging API push endpoint。只有 Edge Function 讀取 service role key 與 LINE channel access token；瀏覽器只呼叫受 Auth 保護的 function endpoint。現行通知流程不要求外師或學校人員綁定個人 LINE ID；行政群組 ID 請透過 `foreign_teacher_line_group_settings` 設定表或對應的 group ID secret 管理。舊有 LINE binding migration 與 webhook 檔案保留作為相容性資料，但不再作為請假通知的必要條件。
 
-## 六、部署前驗證清單
+## 六、LINE 行政群組推播與設定
+
+請先執行 `supabase/migrations/202609020004_line_group_settings.sql`，或在全新資料庫執行已整合該 table 的 `supabase/foreign_teacher_schema.sql`。青山管理端只能設定青山群組，東原管理端只能設定東原群組，admin 可設定兩者。外師不需要綁定個人 LINE ID，也不會因缺少 `line_user_id` 被阻擋送出假單。
+
+外師送出假單時，系統會建立 `SchoolMailbox`／`Submitted` 通知，Edge Function 優先從 `foreign_teacher_line_group_settings` 查詢對應學校的 `group_id`，找不到時才使用 `CINGSHAN_LINE_GROUP_ID` 或 `DONGYUAN_LINE_GROUP_ID` secret fallback。核准與退件只更新網站狀態，不會推播給外師。
+
+## 七、部署前驗證清單
 
 先在本機完成 `pnpm check`、`pnpm test` 與 production build。接著從 feature branch 發 Pull Request，確認 Vercel Preview 可登入、讀取 Supabase、上傳附件、建立待簽核假單與產生列印畫面。通過後合併至 `main`，再用正式帳號測試外師、青山國小與東原國中的權限邊界。
 
@@ -108,7 +114,7 @@ Vercel 外部部署不會自動沿用目前 Manus 內建的 project secrets、�
 
 本 repository 現已提供可審閱的 `supabase/migrations/202608280001_initial_leave_management.sql`，內容包含 PostgreSQL 業務表、`foreign_teacher_profiles` Auth role helper、RLS policies、private `foreign-teacher-leave-attachments` bucket 與 Storage policies。套用前請先在 Supabase project 建立備份，確認既有資料是否需要轉換，再執行 `supabase db push`；migration 以 `auth.uid()`、`foreign_teacher_profiles.role` 與 `public.foreign_teacher_can_access_application()` 作為權限邊界，前端隱藏按鈕不是安全控制。
 
-前端公開設定可由 `client/src/lib/supabase.ts` 讀取 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY`，並以 `persistSession`、`autoRefreshToken`、`detectSessionInUrl` 管理 email/password session。缺少變數時會回傳未設定狀態，不會在 demo 預覽環境誤發出 Auth 請求。`supabase/functions/send-line-notification/index.ts` 是 LINE Messaging API Edge Function；請以 Supabase secrets 設定 `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`LINE_CINGSHAN_RECIPIENT_ID`、`LINE_DONGYUAN_RECIPIENT_ID` 與既有 `SUPABASE_SERVICE_ROLE_KEY`，再依通知佇列的 `notification_id` 呼叫。service role key 與 LINE secrets 不得進入 `VITE_` 變數。
+前端公開設定可由 `client/src/lib/supabase.ts` 讀取 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY`，並以 `persistSession`、`autoRefreshToken`、`detectSessionInUrl` 管理 email/password session。缺少變數時會回傳未設定狀態，不會在正式 Auth 架構外誤發出請求。`supabase/functions/send-line-notification/index.ts` 是 LINE Messaging API Edge Function；請以 Supabase secrets 設定 `LINE_CHANNEL_ACCESS_TOKEN`、`LINE_CHANNEL_SECRET`、`CINGSHAN_LINE_GROUP_ID`、`DONGYUAN_LINE_GROUP_ID` 與既有 `SUPABASE_SERVICE_ROLE_KEY`。新的 `foreign_teacher_line_group_settings` table 也可由學校管理設定頁保存群組 ID，Edge Function 會優先讀取該 table，找不到時才使用對應 secret fallback。只有 `Submitted` 事件會推播至行政群組；核准與退件只更新網站狀態，不會推播給外師。service role key 與 LINE secrets 不得進入 `VITE_` 變數。
 
 ## 十、目前過渡邊界與切換順序
 
