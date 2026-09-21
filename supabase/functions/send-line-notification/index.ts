@@ -15,7 +15,7 @@ type NotificationRow = {
   application_id: number;
   recipient_type: "SchoolMailbox" | "Teacher";
   recipient_ref: string;
-  event_type: "Submitted" | "Approved" | "Rejected";
+  event_type: "Submitted" | "Approved" | "Rejected" | "Cancelled";
   status: "Queued" | "Sent" | "Failed";
   foreign_teacher_leave_applications: {
     application_no: string;
@@ -52,12 +52,14 @@ Deno.serve(async (request) => {
     if (!isAdmin && row.foreign_teacher_leave_applications.teacher_id !== userData.user.id) return json({ error: "Forbidden" }, 403);
     if (row.status === "Sent") return json({ ok: true, status: "Sent" });
 
-    if (row.event_type !== "Submitted" || row.recipient_type !== "SchoolMailbox") {
+    if (row.event_type !== "Submitted" && row.event_type !== "Cancelled" || row.recipient_type !== "SchoolMailbox") {
       await supabaseAdmin.from("foreign_teacher_leave_notifications").update({ status: "Sent", sent_at: new Date().toISOString(), error_message: null }).eq("id", row.id);
-      return json({ ok: true, status: "Skipped", reason: "Only new submissions are pushed to school groups" });
+      return json({ ok: true, status: "Skipped", reason: "Only submissions and cancellations are pushed to school groups" });
     }
     const recipientId = await resolveRecipientId(row);
-    const message = `外師請假通知\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}\n狀態：${row.event_type}`;
+    const message = row.event_type === "Cancelled"
+      ? `⚠️ 外師已取消請假申請\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}`
+      : `外師請假通知\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}\n狀態：${row.event_type}`;
     const lineResponse = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { Authorization: `Bearer ${lineToken}`, "Content-Type": "application/json" },

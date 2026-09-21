@@ -1,4 +1,4 @@
-export type HistoryFilterStatus = "all" | "Pending" | "Approved" | "Rejected";
+export type HistoryFilterStatus = "all" | "Pending" | "Approved" | "Rejected" | "Cancelled";
 
 export type HistoryFilterRecord = {
   type: string;

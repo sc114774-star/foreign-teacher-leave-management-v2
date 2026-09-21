@@ -5,7 +5,7 @@ export type BalanceRecord = {
   endDate: string;
   type: string;
   hours: number;
-  status: "Pending" | "Approved" | "Rejected";
+  status: "Pending" | "Approved" | "Rejected" | "Cancelled";
 };
 
 export type LeaveBalanceSummary = {
@@ -34,7 +34,7 @@ export function academicYearForDate(date: string): string {
 }
 
 function isCountedApplication(record: BalanceRecord, academicYear: string): boolean {
-  return record.status !== "Rejected" && academicYearForDate(record.startDate) === academicYear;
+  return !["Rejected", "Cancelled"].includes(record.status) && academicYearForDate(record.startDate) === academicYear;
 }
 
 export function calculateLeaveBalance(records: BalanceRecord[], academicYear: string, ptoTotal: number): LeaveBalanceSummary {

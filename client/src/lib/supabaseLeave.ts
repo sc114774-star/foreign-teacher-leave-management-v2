@@ -11,7 +11,7 @@ export type SupabaseLeaveApplication = {
   start_at: string;
   end_at: string;
   total_hours: number;
-  status: "Pending" | "Approved" | "Rejected";
+  status: "Pending" | "Approved" | "Rejected" | "Cancelled";
   created_at: string;
   updated_at: string;
   foreign_teacher_leave_days?: SupabaseLeaveDay[];
@@ -133,6 +133,13 @@ export async function decideSupabaseLeaveApplication(input: SupabaseLeaveDecisio
   const approval = await client.from("foreign_teacher_leave_approvals").insert({ application_id: input.application_id, school: input.school, approver_id: auth.user.id, decision: input.decision, note: input.note ?? null });
   if (approval.error) throw approval.error;
   return { applicationId: input.application_id, decision: input.decision };
+}
+
+export async function cancelSupabaseLeaveApplication(applicationId: number) {
+  const client = requireClient();
+  const { data, error } = await client.rpc("foreign_teacher_cancel_leave_application", { p_application_id: applicationId });
+  if (error) throw error;
+  return data as { application_id: number; status: "Cancelled"; notification_id: number };
 }
 
 export async function uploadSupabaseLeaveAttachment(applicationId: number, file: File): Promise<SupabaseLeaveAttachment> {

@@ -45,7 +45,9 @@ function schoolCopy(school: string) {
 function dateParts(value: string) {
   const normalized = value.replace(/\//g, "-").split("T")[0];
   const [year = "", month = "", date = ""] = normalized.split("-");
-  return { year, month, date };
+  const time = value.includes("T") ? value.split("T")[1].replace(/[+-].*$/, "").slice(0, 5) : "";
+  const [hour = "", minute = ""] = time.split(":");
+  return { year, month, date, hour, minute };
 }
 
 function leaveDays(hours: number) {
@@ -57,9 +59,6 @@ function PrintTable({ record, academicYear }: { record?: PrintRecord; academicYe
   const year = Number(academicYear.slice(0, 4)) - 1911;
   const start = dateParts(record?.startDate ?? "");
   const end = dateParts(record?.endDate ?? "");
-  const interval = record
-    ? `${start.year}/${start.month}/${start.date}–${end.year}/${end.month}/${end.date}`
-    : "";
   const blankRows = Array.from({ length: emptyRowCount });
 
   return (
@@ -99,11 +98,10 @@ function PrintTable({ record, academicYear }: { record?: PrintRecord; academicYe
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.reason ?? ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record ? `${record.officialDocument} · ${record.location}` : ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">
-              <div className="grid grid-cols-6 gap-0 text-center"><span>年<br />(Year)<br />{start.year}</span><span>月<br />(Month)<br />{start.month}</span><span>日<br />(Date)<br />{start.date}</span><span>時<br />(Hour)<br />—</span><span>分<br />(Minute)<br />—</span><span>小計<br />(Total)<br />{record ? leaveDays(record.hours) : ""}</span></div>
-              <div className="mt-2 text-center break-words">{interval}</div>
+              <div className="grid grid-cols-6 gap-0 text-center"><span>年<br />(Year)<br />{start.year}{record && end.year !== start.year ? `~${end.year}` : ""}</span><span>月<br />(Month)<br />{start.month}{record && end.month !== start.month ? `~${end.month}` : ""}</span><span>日<br />(Date)<br />{start.date}{record && end.date !== start.date ? `~${end.date}` : ""}</span><span>時<br />(Hour)<br />{start.hour || "—"}{record && end.hour && end.hour !== start.hour ? `~${end.hour}` : ""}</span><span>分<br />(Minute)<br />{start.minute || "—"}{record && end.minute && end.minute !== start.minute ? `~${end.minute}` : ""}</span><span>小計<br />(Total)<br />{record ? leaveDays(record.hours) : ""}</span></div>
             </td>
-            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type === "PTO" ? leaveDays(record.hours) : ""}<br />年度已用<br />{record?.ptoUsedDays ?? ""}</td>
-            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type !== "PTO" ? leaveDays(record?.hours ?? 0) : ""}<br />年度已用<br />{record?.sickPersonalUsedDays ?? ""}</td>
+            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type === "PTO" ? leaveDays(record.hours) : ""}</td>
+            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type !== "PTO" ? leaveDays(record?.hours ?? 0) : ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
