@@ -24,6 +24,7 @@ export type PrintRecord = {
 type PrintLayoutProps = {
   records: PrintRecord[];
   academicYear: string;
+  printSchool: "青山國小" | "東原國中";
   title?: string;
   onClose: () => void;
 };
@@ -54,8 +55,8 @@ function leaveDays(hours: number) {
   return `${(hours / 8).toFixed(2).replace(/\.00$/, "")} 日 / ${(hours / 8).toFixed(2).replace(/\.00$/, "")} days`;
 }
 
-function PrintTable({ record, academicYear }: { record?: PrintRecord; academicYear: string }) {
-  const school = schoolCopy(record?.school ?? "青山國小");
+function PrintTable({ record, academicYear, printSchool }: { record?: PrintRecord; academicYear: string; printSchool: "青山國小" | "東原國中" }) {
+  const school = schoolCopy(record?.school || printSchool);
   const year = Number(academicYear.slice(0, 4)) - 1911;
   const start = dateParts(record?.startDate ?? "");
   const end = dateParts(record?.endDate ?? "");
@@ -115,7 +116,7 @@ function PrintTable({ record, academicYear }: { record?: PrintRecord; academicYe
   );
 }
 
-export default function PrintLayout({ records, academicYear, title, onClose }: PrintLayoutProps) {
+export default function PrintLayout({ records, academicYear, printSchool, title, onClose }: PrintLayoutProps) {
   const pages = records.length ? records : [undefined];
   return (
     <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-100 p-4 print:static print:block print:overflow-visible print:bg-white print:p-0">
@@ -124,8 +125,8 @@ export default function PrintLayout({ records, academicYear, title, onClose }: P
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">PrintLayout · 橫式假卡</p><h2 className="text-lg font-semibold break-words whitespace-pre-wrap">{title ?? "請假卡 · Leave Application Form"}</h2><p className="text-xs text-slate-500">共 {records.length} 筆；每張假卡獨立分頁。</p></div>
           <div className="flex gap-2"><Button variant="outline" onClick={onClose}><X className="mr-2 h-4 w-4" />關閉</Button><Button onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />列印</Button></div>
         </div>
-        <div className="hidden print:block print:w-full print:bg-white">{pages.map((record, index) => <div key={record?.id ?? `empty-${index}`} className="print-card" style={{ pageBreakAfter: index === pages.length - 1 ? "auto" : "always" }}><PrintTable record={record} academicYear={academicYear} /></div>)}</div>
-        <div className="print:hidden">{pages.map((record, index) => <div key={`preview-${record?.id ?? index}`} className="mb-6"><PrintTable record={record} academicYear={academicYear} /></div>)}</div>
+        <div className="hidden print:block print:w-full print:bg-white">{pages.map((record, index) => <div key={record?.id ?? `empty-${index}`} className="print-card" style={{ pageBreakAfter: index === pages.length - 1 ? "auto" : "always" }}><PrintTable record={record} academicYear={academicYear} printSchool={printSchool} /></div>)}</div>
+        <div className="print:hidden">{pages.map((record, index) => <div key={`preview-${record?.id ?? index}`} className="mb-6"><PrintTable record={record} academicYear={academicYear} printSchool={printSchool} /></div>)}</div>
       </div>
     </div>
   );

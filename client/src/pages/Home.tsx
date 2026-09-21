@@ -267,6 +267,12 @@ function formatDate(value: string) {
   return value.replace(/-/g, "/");
 }
 
+function printSchoolName(school: string) {
+  return school.includes("東原")
+    ? { zh: "臺南市東原國民中學", en: "Tainan Municipal Dongyuan Junior High School" }
+    : { zh: "臺南市青山國民小學", en: "Tainan Municipal Cingshan Elementary School" };
+}
+
 function formatApiDate(value: Date | string) {
   return formatDate(new Date(value).toISOString().slice(0, 10));
 }
@@ -589,12 +595,11 @@ function LeaveCollectionPrint({
               >
                 <div className="border-b-2 border-[#33443a] p-5 text-center">
                   <p className="text-lg font-bold tracking-[0.22em]">
-                    臺南市青山國民小學　
+                    {printSchoolName(record.school).zh}　
                     {Number(academicYear.slice(0, 4)) - 1911} 學年度　請假卡
                   </p>
                   <p className="mt-1 text-sm font-medium tracking-[0.1em]">
-                    {record.school}　{academicYear} Academic Year　Leave
-                    Application Form
+                    {printSchoolName(record.school).en}　{Number(academicYear.slice(0, 4)) - 1911} Academic Year Leave Application Form
                   </p>
                   <p className="mt-2 text-[10px] text-[#6e776f]">
                     第 {index + 1} 筆 / Record {index + 1} · {record.id}
@@ -758,12 +763,11 @@ function LeaveCardPrint({
         <div className="border-2 border-[#33443a]">
           <div className="border-b-2 border-[#33443a] p-5 text-center">
             <p className="text-lg font-bold tracking-[0.22em]">
-              臺南市青山國民小學　{Number(academicYear.slice(0, 4)) - 1911}{" "}
+              {printSchoolName(record.school).zh}　{Number(academicYear.slice(0, 4)) - 1911}{" "}
               學年度　請假卡
             </p>
             <p className="mt-1 text-sm font-medium tracking-[0.1em]">
-              {record.school}　{academicYear} Academic Year　Leave Application
-              Form
+              {printSchoolName(record.school).en}　{Number(academicYear.slice(0, 4)) - 1911} Academic Year Leave Application Form
             </p>
             <p className="mt-2 text-[10px] text-[#6e776f]">
               依現行校務規範更新 · Current school leave policy
@@ -1491,29 +1495,28 @@ export default function Home() {
                                       <Printer className="mr-2 h-4 w-4" />
                                       Print
                                     </Button>
-                                    {record.applicationId &&
-                                      (record.status === "Pending" || record.status === "Approved") &&
-                                      record.endDate >= todayIso() && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-[#a55045]"
-                                          onClick={async () => {
-                                            try {
-                                              if (!window.confirm("Are you sure you want to cancel this leave?")) return;
-                                              const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
-                                              await dispatchSupabaseLeaveNotification(cancellation.notification_id);
-                                              await supabaseLeaveQuery.refetch();
-                                              handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
-                                            } catch (error) {
-                                              handleAction(error instanceof Error ? error.message : "Unable to cancel leave application · 無法取消假單");
-                                            }
-                                          }}
-                                        >
-                                          <X className="mr-2 h-4 w-4" />
-                                          Cancel · 取消
-                                        </Button>
-                                      )}
+                                    {role === "teacher" && record.applicationId && record.status !== "Cancelled" && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        onClick={async () => {
+                                          if (!window.confirm("Are you sure you want to cancel this leave?")) return;
+                                          try {
+                                            const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
+                                            await dispatchSupabaseLeaveNotification(cancellation.notification_id);
+                                            await supabaseLeaveQuery.refetch();
+                                            handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
+                                          } catch (error) {
+                                            handleAction(error instanceof Error ? error.message : "Unable to cancel leave application · 無法取消假單");
+                                          }
+                                        }}
+                                      >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Cancel · 取消
+                                      </Button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -1733,6 +1736,7 @@ export default function Home() {
         <PrintLayout
           records={[printRecord]}
           academicYear={academicYear}
+          printSchool={printRecord.school === "東原國中" ? "東原國中" : "青山國小"}
           title="請假卡 · Leave Application Form"
           onClose={() => setPrintRecord(null)}
         />
@@ -1741,6 +1745,7 @@ export default function Home() {
         <PrintLayout
           records={printCollection.records}
           academicYear={academicYear}
+          printSchool={role === "dongyuan" ? "東原國中" : "青山國小"}
           title={printCollection.title}
           onClose={() => setPrintCollection(null)}
         />
