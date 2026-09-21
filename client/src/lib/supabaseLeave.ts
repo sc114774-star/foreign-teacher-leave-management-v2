@@ -142,6 +142,15 @@ export async function cancelSupabaseLeaveApplication(applicationId: number) {
   return data as { application_id: number; status: "Cancelled"; notification_id: number };
 }
 
+export async function dispatchSupabaseLeaveNotification(notificationId: number) {
+  const client = requireClient();
+  const { data, error } = await client.functions.invoke("send-line-notification", {
+    body: { notification_id: notificationId },
+  });
+  if (error) throw error;
+  return data as { ok: boolean; status: string };
+}
+
 export async function uploadSupabaseLeaveAttachment(applicationId: number, file: File): Promise<SupabaseLeaveAttachment> {
   const client = requireClient();
   if (file.size > 10 * 1024 * 1024) throw new Error("Attachment must be 10 MB or smaller");

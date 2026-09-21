@@ -31,8 +31,8 @@ begin
     raise exception 'Expired leave applications cannot be cancelled';
   end if;
 
-  select min(assigned_school), count(distinct assigned_school)
-    into assigned_school_name, refund_hours
+  select min(assigned_school)
+    into assigned_school_name
   from public.foreign_teacher_leave_days
   where application_id = p_application_id;
   if assigned_school_name is null then
@@ -48,7 +48,11 @@ begin
     set approved_used_hours = greatest(0, approved_used_hours - refund_hours), updated_at = now()
     where teacher_id = application_row.teacher_id
       and leave_type = application_row.leave_type
-      and academic_year = (extract(year from (application_row.start_at - interval '7 months'))::int)::text;
+      and academic_year = format(
+        '%s-%s',
+        extract(year from (application_row.start_at - interval '7 months'))::int,
+        extract(year from (application_row.start_at - interval '7 months'))::int + 1
+      );
 
   insert into public.foreign_teacher_leave_notifications
     (application_id, recipient_type, recipient_ref, event_type, channel, status)

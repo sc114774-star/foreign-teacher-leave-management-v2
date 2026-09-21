@@ -9,6 +9,7 @@ import {
   uploadSupabaseLeaveAttachment,
   decideSupabaseLeaveApplication,
   cancelSupabaseLeaveApplication,
+  dispatchSupabaseLeaveNotification,
   fetchSupabaseMakeupDays,
   upsertSupabaseMakeupDay,
   deleteSupabaseMakeupDay,
@@ -1499,9 +1500,11 @@ export default function Home() {
                                           className="text-[#a55045]"
                                           onClick={async () => {
                                             try {
-                                              await cancelSupabaseLeaveApplication(record.applicationId!);
+                                              if (!window.confirm("Are you sure you want to cancel this leave?")) return;
+                                              const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
+                                              await dispatchSupabaseLeaveNotification(cancellation.notification_id);
                                               await supabaseLeaveQuery.refetch();
-                                              handleAction("Leave application cancelled · 假單已取消，額度已退還");
+                                              handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
                                             } catch (error) {
                                               handleAction(error instanceof Error ? error.message : "Unable to cancel leave application · 無法取消假單");
                                             }
@@ -2730,7 +2733,7 @@ function SchoolView({
                             Read-only · 唯讀
                           </span>
                         </div>
-                      ) : (
+                      ) : record.school === school ? (
                         <div className="flex items-center justify-end gap-1">
                           <AttachmentActions
                             applicationId={record.applicationId}
@@ -2746,6 +2749,17 @@ function SchoolView({
                             <Printer className="mr-2 h-4 w-4" />
                             Print card
                           </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2">
+                          <AttachmentActions
+                            applicationId={record.applicationId}
+                            attachments={record.attachments}
+                            onPreview={onPreviewAttachment}
+                          />
+                          <span className="text-xs font-medium text-[#a19f95]">
+                            Read-only · 唯讀
+                          </span>
                         </div>
                       )}
                     </td>
