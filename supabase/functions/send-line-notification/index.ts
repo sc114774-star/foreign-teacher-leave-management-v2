@@ -47,7 +47,10 @@ Deno.serve(async (request) => {
       .select("id, application_id, recipient_type, recipient_ref, event_type, status, foreign_teacher_leave_applications(application_no, leave_type, reason, teacher_id, start_at, end_at, total_hours)")
       .eq("id", notificationId)
       .single();
-    if (notificationError || !notification) return json({ error: "Notification not found" }, 404);
+    if (notificationError || !notification) {
+      console.error("[send-line-notification] Notification lookup failed", { notificationId, error: notificationError });
+      return json({ error: notificationError?.message || "Notification not found", details: notificationError?.details, hint: notificationError?.hint }, 404);
+    }
 
     const row = notification as unknown as NotificationRow;
     const { data: profile } = await supabaseAdmin.from("foreign_teacher_profiles").select("role").eq("user_id", userData.user.id).single();
@@ -60,6 +63,7 @@ Deno.serve(async (request) => {
       return json({ ok: true, status: "Skipped", reason: "Only submissions and cancellations are pushed to school groups" });
     }
     const recipientId = await resolveRecipientId(row);
+    console.log("[send-line-notification] Resolved LINE group", { notificationId, school: row.recipient_ref, recipientId, eventType: row.event_type });
     const { data: teacherProfile } = await supabaseAdmin.from("foreign_teacher_profiles").select("name").eq("user_id", row.foreign_teacher_leave_applications.teacher_id).maybeSingle();
     const application = row.foreign_teacher_leave_applications;
     const teacherName = teacherProfile?.name || "外籍教師";
@@ -72,24 +76,38 @@ Deno.serve(async (request) => {
       headers: { Authorization: `Bearer ${lineToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ to: recipientId, messages: [{ type: "text", text: message }] }),
     });
-    if (!lineResponse.ok) throw new Error(`LINE push failed (${lineResponse.status}): ${await lineResponse.text()}`);
+    console.log("[send-line-notification] LINE API response", { notificationId, status: lineResponse.status, ok: lineResponse.ok });
+    if (!lineResponse.ok) {
+      const responseBody = await lineResponse.text();
+      console.error("[send-line-notification] LINE push failed", { notificationId, status: lineResponse.status, responseBody });
+      throw new Error(`LINE push failed (${lineResponse.status}): ${responseBody}`);
+    }
 
     await supabaseAdmin.from("foreign_teacher_leave_notifications").update(sentNotificationUpdate(new Date().toISOString())).eq("id", row.id);
     return json({ ok: true, status: "Sent" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[send-line-notification] Unhandled notification error", { notificationId, error });
     if (notificationId) await supabaseAdmin.from("foreign_teacher_leave_notifications").update(failedNotificationUpdate(message)).eq("id", notificationId);
-    return json({ error: message }, 500);
+    return json({ error: message, notification_id: notificationId }, 500);
   }
 });
 
 async function resolveRecipientId(row: NotificationRow) {
   if (row.recipient_type !== "SchoolMailbox") throw new Error("Teacher LINE notifications are disabled");
   const configured = await supabaseAdmin.from("foreign_teacher_line_group_settings").select("group_id").eq("school", row.recipient_ref).maybeSingle();
-  if (!configured.error && configured.data?.group_id) return configured.data.group_id;
+  if (configured.error) console.error("[send-line-notification] Group settings lookup failed", { school: row.recipient_ref, error: configured.error });
+  if (!configured.error && configured.data?.group_id) {
+    console.log("[send-line-notification] Using database LINE group", { school: row.recipient_ref, groupId: configured.data.group_id });
+    return configured.data.group_id;
+  }
   const envName = row.recipient_ref === "青山國小" ? "CINGSHAN_LINE_GROUP_ID" : "DONGYUAN_LINE_GROUP_ID";
   const id = Deno.env.get(envName);
-  if (id) return id;
+  if (id) {
+    console.log("[send-line-notification] Using environment LINE group fallback", { school: row.recipient_ref, envName, groupId: id });
+    return id;
+  }
+  console.error("[send-line-notification] No LINE group configured", { school: row.recipient_ref, envName });
   throw new Error(`${envName} is not configured for ${row.recipient_ref}`);
 }
 

@@ -18,6 +18,7 @@ import {
   type SupabaseLeaveApplication,
 } from "@/lib/supabaseLeave";
 import {
+  AlertTriangle,
   Bell,
   CalendarDays,
   Check,
@@ -1010,6 +1011,7 @@ export default function Home() {
     readStored(`foreign-teacher-makeup-days-${role}`, defaultMakeupDays)
   );
   const [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"success" | "error">("success");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
   const [cancellingApplicationId, setCancellingApplicationId] = useState<number | null>(null);
@@ -1089,8 +1091,9 @@ export default function Home() {
           { key: "Settings", zh: "寒暑假設定", Icon: Settings2 },
         ];
 
-  const handleAction = (message: string) => {
+  const handleAction = (message: string, kind: "success" | "error" = "success") => {
     setNotice(message);
+    setNoticeKind(kind);
     window.setTimeout(() => setNotice(""), 3200);
   };
   const navigateSection = (key: string) => {
@@ -1255,12 +1258,12 @@ export default function Home() {
               <div
                 className={cn(
                   "mb-5 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm",
-                  dataError
-                    ? "border-[#e1b1a9] bg-[#fff1ed] text-[#a55045]"
-                    : "border-[#b7d1bb] bg-[#eef8f0] text-[#41714c]"
+                    dataError || noticeKind === "error"
+                      ? "border-[#e1b1a9] bg-[#fff1ed] text-[#a55045]"
+                      : "border-[#b7d1bb] bg-[#eef8f0] text-[#41714c]"
                 )}
               >
-                <Check className="h-4 w-4" />
+                {dataError || noticeKind === "error" ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <Check className="h-4 w-4 shrink-0" />}
                 {notice || dataStateNotice}
               </div>
             )}
