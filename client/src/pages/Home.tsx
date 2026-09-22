@@ -9,7 +9,6 @@ import {
   uploadSupabaseLeaveAttachment,
   decideSupabaseLeaveApplication,
   cancelSupabaseLeaveApplication,
-  dispatchSupabaseLeaveNotification,
   fetchSupabaseMakeupDays,
   fetchSupabaseSubstitutes,
   upsertSupabaseSubstitute,
@@ -1531,21 +1530,9 @@ export default function Home() {
                                           if (!window.confirm("Are you sure you want to cancel this leave?")) return;
                                           setCancellingApplicationId(record.applicationId!);
                                           try {
-                                            const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
-                                            let lineFailure: string | null = null;
-                                            try {
-                                              await dispatchSupabaseLeaveNotification(cancellation.notification_id);
-                                            } catch (notificationError) {
-                                              lineFailure = formatSupabaseError(notificationError);
-                                              console.error("[Leave cancellation] LINE notification failed after cancellation succeeded", notificationError);
-                                            }
+                                            await cancelSupabaseLeaveApplication(record.applicationId!);
                                             await supabaseLeaveQuery.refetch();
-                                            if (lineFailure) {
-                                              handleAction(`Leave application cancelled, but LINE notification failed · 假單已取消、額度已退還，但 LINE 通知失敗\n${lineFailure}`);
-                                              window.alert(`假單已取消，額度已退還，但 LINE 通知發送失敗。\n\n${lineFailure}`);
-                                            } else {
-                                              handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
-                                            }
+                                            handleAction("Leave application deleted · 假單已刪除，額度已退還，歷史紀錄已移除");
                                           } catch (error) {
                                             const message = formatSupabaseError(error);
                                             console.error("[Leave cancellation] Supabase error", error);

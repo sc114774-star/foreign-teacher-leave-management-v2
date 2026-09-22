@@ -183,7 +183,7 @@ export async function cancelSupabaseLeaveApplication(applicationId: number) {
   const client = requireClient();
   const { data, error } = await client.rpc("foreign_teacher_cancel_leave_application", { p_application_id: applicationId });
   if (error) throw error;
-  return data as { application_id: number; status: "Cancelled"; notification_id: number };
+  return data as { application_id: number; status: "Deleted"; notification_id: null };
 }
 
 export async function dispatchSupabaseLeaveNotification(notificationId: number) {
