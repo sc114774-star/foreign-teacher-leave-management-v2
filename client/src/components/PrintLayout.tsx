@@ -17,6 +17,7 @@ export type PrintRecord = {
   jobTitle: string;
   officialDocument: string;
   location: string;
+  substituteName?: string;
   ptoUsedDays: number;
   sickPersonalUsedDays: number;
 };
@@ -104,7 +105,7 @@ function PrintTable({ record, academicYear, printSchool }: { record?: PrintRecor
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type === "PTO" ? leaveDays(record.hours) : ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.type !== "PTO" ? leaveDays(record?.hours ?? 0) : ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
-            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
+            <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal">{record?.substituteName ?? ""}</td>
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
             <td className="border-r border-slate-800 px-1 py-2 text-center break-words whitespace-normal" />
             <td className="px-1 py-2 text-center break-words whitespace-normal" />

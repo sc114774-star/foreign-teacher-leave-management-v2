@@ -11,6 +11,7 @@ export type SupabaseLeaveApplication = {
   start_at: string;
   end_at: string;
   total_hours: number;
+  substitute_name?: string | null;
   status: "Pending" | "Approved" | "Rejected" | "Cancelled";
   created_at: string;
   updated_at: string;
@@ -25,6 +26,7 @@ export type SupabasePtoSetting = { id: number; teacher_id: string; academic_year
 export type SupabaseTeacherProfile = { user_id: string; name: string | null; email: string | null; role: "teacher" | "cingshan" | "dongyuan" | "admin" };
 export type SupabaseMakeupDay = { id: number; academic_year: string; makeup_date: string; source_date: string | null; assigned_school: "青山國小" | "東原國中"; note: string | null; created_by: string; created_at: string; updated_at: string };
 export type SupabaseLineGroupSetting = { school: "青山國小" | "東原國中"; group_id: string; updated_by: string; updated_at: string };
+export type SupabaseSubstitute = { id: number; school: "青山國小" | "東原國中"; name: string; created_by: string; created_at: string; updated_at: string };
 export type SupabaseLeaveDecision = { application_id: number; school: "青山國小" | "東原國中"; decision: "Approved" | "Rejected"; note?: string };
 export type SupabaseSignedAttachment = { id: number; file_name: string; mime_type: string; url: string };
 
@@ -76,6 +78,31 @@ export async function fetchSupabaseLineGroupSettings() {
   const result = await client.from("foreign_teacher_line_group_settings").select("school, group_id, updated_by, updated_at").order("school", { ascending: true });
   if (result.error) throw result.error;
   return result.data as unknown as SupabaseLineGroupSetting[];
+}
+
+export async function fetchSupabaseSubstitutes(school?: "青山國小" | "東原國中") {
+  const client = requireClient();
+  let query = client.from("foreign_teacher_substitutes").select("*").order("school", { ascending: true }).order("name", { ascending: true });
+  if (school) query = query.eq("school", school);
+  const result = await query;
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseSubstitute[];
+}
+
+export async function upsertSupabaseSubstitute(input: { id?: number; school: "青山國小" | "東原國中"; name: string }) {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) throw new Error("Supabase Auth session is required");
+  const payload = { ...(input.id ? { id: input.id } : {}), school: input.school, name: input.name.trim(), created_by: auth.user.id, updated_at: new Date().toISOString() };
+  const result = await client.from("foreign_teacher_substitutes").upsert(payload).select("*").single();
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseSubstitute;
+}
+
+export async function deleteSupabaseSubstitute(id: number) {
+  const client = requireClient();
+  const result = await client.from("foreign_teacher_substitutes").delete().eq("id", id);
+  if (result.error) throw result.error;
 }
 
 export async function upsertSupabaseLineGroupSetting(input: { school: "青山國小" | "東原國中"; groupId: string }) {

@@ -11,6 +11,9 @@ import {
   cancelSupabaseLeaveApplication,
   dispatchSupabaseLeaveNotification,
   fetchSupabaseMakeupDays,
+  fetchSupabaseSubstitutes,
+  upsertSupabaseSubstitute,
+  deleteSupabaseSubstitute,
   upsertSupabaseMakeupDay,
   deleteSupabaseMakeupDay,
   type SupabaseLeaveApplication,
@@ -128,6 +131,7 @@ type LeaveRecord = {
   jobTitle: string;
   officialDocument: string;
   location: string;
+  substituteName?: string;
   ptoUsedDays: number;
   sickPersonalUsedDays: number;
   attachments?: AttachmentSummary[];
@@ -293,6 +297,7 @@ function toLeaveRecord(row: {
     startAt: Date | string;
     endAt: Date | string;
     totalHours: string | number;
+    substituteName?: string | null;
     status: LeaveStatus;
   };
   days: Array<{ assignedSchool: string; routeReason: string }>;
@@ -328,6 +333,7 @@ function toLeaveRecord(row: {
     jobTitle: "Foreign Nationality English Teacher",
     officialDocument: row.application.officialDocumentNo ?? "—",
     location: row.application.officialLocation ?? "—",
+    substituteName: row.application.substituteName ?? undefined,
     ptoUsedDays: 0,
     sickPersonalUsedDays: 0,
     attachments: row.attachments,
@@ -352,6 +358,7 @@ function toSupabaseLeaveRecord(
       startAt: application.start_at,
       endAt: application.end_at,
       totalHours: application.total_hours,
+      substituteName: application.substitute_name,
       status: application.status,
     },
     days: (application.foreign_teacher_leave_days ?? []).map(day => ({
@@ -957,6 +964,12 @@ export default function Home() {
     enabled: Boolean(auth.user) && auth.supabaseConfigured,
     retry: false,
   });
+  const substitutesQuery = useQuery({
+    queryKey: ["supabase", "substitutes", role],
+    queryFn: () => fetchSupabaseSubstitutes(),
+    enabled: Boolean(auth.user) && auth.supabaseConfigured,
+    retry: false,
+  });
   const ptoTotal =
     role === "teacher"
       ? Number(ptoSettingsQuery.data?.[0]?.total_days ?? 0)
@@ -1537,6 +1550,15 @@ export default function Home() {
                 ptoSettings={ptoSettingsQuery.data ?? []}
                 teacherProfiles={teacherProfilesQuery.data ?? []}
                 lineGroupSettings={lineGroupSettingsQuery.data ?? []}
+                substitutes={substitutesQuery.data ?? []}
+                onSaveSubstitute={async input => {
+                  await upsertSupabaseSubstitute(input);
+                  await substitutesQuery.refetch();
+                }}
+                onDeleteSubstitute={async id => {
+                  await deleteSupabaseSubstitute(id);
+                  await substitutesQuery.refetch();
+                }}
                 onSaveLineGroup={async (school, groupId) => {
                   await upsertSupabaseLineGroupSetting({ school, groupId });
                   await lineGroupSettingsQuery.refetch();
@@ -1627,6 +1649,7 @@ export default function Home() {
       {showForm && (
         <LeaveForm
           route={selectedRoute}
+          startSchool={routeSchool(dateRange.start, calendarSettings.vacationPeriods, makeupDays)}
           dateRange={dateRange}
           setDateRange={setDateRange}
           calendarSettings={calendarSettings}
@@ -1635,6 +1658,7 @@ export default function Home() {
           academicYear={academicYear}
           salaryWarnings={balanceSummary.salaryWarnings}
           ptoRemaining={balanceSummary.ptoRemaining}
+          substitutes={substitutesQuery.data ?? []}
           onClose={() => setShowForm(false)}
           onSubmit={async (
             kind,
@@ -1642,6 +1666,7 @@ export default function Home() {
             makeupSchool,
             reason,
             selectedLeaveType,
+            substituteName,
             attachmentFile,
             startTime = "08:00",
             endTime = "17:00"
@@ -1690,6 +1715,7 @@ export default function Home() {
                   official_location: null,
                   start_at: startAt,
                   end_at: endAt,
+                  substitute_name: substituteName,
                   total_hours: splitDays.reduce(
                     (sum, day) => sum + day.hours,
                     0
@@ -1773,6 +1799,7 @@ function datesBetween(start: string, end: string) {
 
 function LeaveForm({
   route,
+  startSchool,
   dateRange,
   setDateRange,
   calendarSettings,
@@ -1781,10 +1808,12 @@ function LeaveForm({
   academicYear,
   salaryWarnings,
   ptoRemaining,
+  substitutes,
   onClose,
   onSubmit,
 }: {
   route: string;
+  startSchool: AttendanceSchool;
   dateRange: { start: string; end: string };
   setDateRange: (v: { start: string; end: string }) => void;
   calendarSettings: CalendarSettings;
@@ -1793,6 +1822,7 @@ function LeaveForm({
   academicYear: string;
   salaryWarnings: string[];
   ptoRemaining: number;
+  substitutes: import("@/lib/supabaseLeave").SupabaseSubstitute[];
   onClose: () => void;
   onSubmit: (
     kind: "regular" | "makeup",
@@ -1800,6 +1830,7 @@ function LeaveForm({
     makeupSchool?: string,
     reason?: string,
     leaveType?: string,
+    substituteName?: string,
     attachmentFile?: File,
     startTime?: string,
     endTime?: string
@@ -1811,6 +1842,7 @@ function LeaveForm({
   const [endTime, setEndTime] = useState("17:00");
   const [reason, setReason] = useState("");
   const [attachmentFile, setAttachmentFile] = useState<File | undefined>();
+  const [substituteName, setSubstituteName] = useState("");
   const isMakeup = leaveType === "Make-up Leave";
   const configuredMakeup = makeupDays.find(item => item.date === makeupDate);
   const resolvedMakeupSchool = configuredMakeup?.school ?? "";
@@ -1818,9 +1850,13 @@ function LeaveForm({
     ? resolvedMakeupSchool === "東原國中"
       ? "東原國中"
       : "青山國小"
-    : route.includes("東原國中")
-      ? "東原國中"
-      : "青山國小";
+    : startSchool;
+  const substituteOptions = substitutes.filter(item => item.school === scheduleSchool);
+  useEffect(() => {
+    if (substituteName && !substituteOptions.some(item => item.name === substituteName)) {
+      setSubstituteName("");
+    }
+  }, [scheduleSchool, substituteName, substituteOptions]);
   const estimatedHours = estimateLeaveHoursForRange(
     scheduleSchool,
     dateRange.start,
@@ -1857,6 +1893,7 @@ function LeaveForm({
   const exceedsPto = leaveType === "PTO" && estimatedDays > ptoRemaining;
   const canSubmit =
     (!isMakeup || Boolean(configuredMakeup)) &&
+    Boolean(substituteName) &&
     (!attachmentRule.required || Boolean(attachmentFile)) &&
     !exceedsPto;
   const displayRoute = isMakeup
@@ -1974,6 +2011,23 @@ function LeaveForm({
           </label>
         </div>
         <label className="mt-5 block space-y-2 text-sm font-medium text-[#58655d]">
+          職務代理人 · Substitute
+          <select
+            required
+            value={substituteName}
+            onChange={event => setSubstituteName(event.target.value)}
+            className="h-11 w-full rounded-xl border border-[#deded5] bg-white px-3 text-sm outline-none focus:border-[#78947c]"
+          >
+            <option value="">請選擇 {scheduleSchool} 代理人 · Select a substitute</option>
+            {substituteOptions.map(item => (
+              <option key={item.id} value={item.name}>{item.name}</option>
+            ))}
+          </select>
+          {substituteOptions.length === 0 && (
+            <span className="block text-xs font-normal text-[#a15d43]">{scheduleSchool} 尚未設定代理人名單 · No substitutes configured.</span>
+          )}
+        </label>
+        <label className="mt-5 block space-y-2 text-sm font-medium text-[#58655d]">
           請假事由 · Reason
           <Textarea
             value={reason}
@@ -2065,6 +2119,7 @@ function LeaveForm({
                 resolvedMakeupSchool,
                 reason.trim(),
                 leaveType,
+                substituteName,
                 attachmentFile,
                 startTime,
                 endTime
@@ -2085,6 +2140,9 @@ function SchoolSettings({
   ptoSettings,
   teacherProfiles,
   lineGroupSettings,
+  substitutes,
+  onSaveSubstitute,
+  onDeleteSubstitute,
   onSaveLineGroup,
   onSavePto,
   calendarSettings,
@@ -2108,8 +2166,15 @@ function SchoolSettings({
   makeupDays: MakeupDay[];
   onSaveMakeup: (days: MakeupDay[]) => void;
   onAction: (message: string) => void;
+  substitutes: import("@/lib/supabaseLeave").SupabaseSubstitute[];
+  onSaveSubstitute: (input: { id?: number; school: "青山國小" | "東原國中"; name: string }) => Promise<void>;
+  onDeleteSubstitute: (id: number) => Promise<void>;
 }) {
   const isPrimary = role !== "teacher" && canEditPrimarySettings(role);
+  const managedSchool: "青山國小" | "東原國中" = role === "dongyuan" ? "東原國中" : "青山國小";
+  const schoolSubstitutes = substitutes.filter(item => item.school === managedSchool);
+  const [substituteName, setSubstituteName] = useState("");
+  const [editingSubstituteId, setEditingSubstituteId] = useState<number | undefined>();
   const [contractStart, setContractStart] = useState(
     calendarSettings.contractStart
   );
@@ -2165,6 +2230,57 @@ function SchoolSettings({
         onSave={onSaveLineGroup}
         onAction={onAction}
       />
+      <Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]">
+        <CardHeader>
+          <CardTitle className="text-lg">職務代理人名單 · Substitute Teachers</CardTitle>
+          <p className="text-sm text-[#92978f]">目前管理學校：{managedSchool}；外師申請時會依起始日期自動載入此名單。</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isPrimary && (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Input
+                value={substituteName}
+                onChange={event => setSubstituteName(event.target.value)}
+                placeholder="輸入代理人姓名 · Substitute name"
+                className="h-11 bg-white"
+              />
+              <Button
+                className="h-11 rounded-xl bg-[#304b3b] hover:bg-[#41644f]"
+                disabled={!substituteName.trim()}
+                onClick={async () => {
+                  try {
+                    await onSaveSubstitute({ id: editingSubstituteId, school: managedSchool, name: substituteName });
+                    setSubstituteName("");
+                    setEditingSubstituteId(undefined);
+                    onAction("Substitute saved · 職務代理人已儲存");
+                  } catch (error) {
+                    onAction(error instanceof Error ? error.message : "Unable to save substitute");
+                  }
+                }}
+              >
+                {editingSubstituteId ? "Update · 更新" : "Add · 新增"}
+              </Button>
+            </div>
+          )}
+          {schoolSubstitutes.length === 0 ? (
+            <p className="rounded-xl bg-[#faf9f5] p-4 text-sm text-[#92978f]">尚未設定代理人 · No substitutes configured.</p>
+          ) : (
+            <div className="space-y-2">
+              {schoolSubstitutes.map(item => (
+                <div key={item.id} className="flex items-center justify-between rounded-xl bg-[#faf9f5] px-4 py-3">
+                  <span className="font-medium text-[#405049]">{item.name}</span>
+                  {isPrimary && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { setEditingSubstituteId(item.id); setSubstituteName(item.name); }}>Edit · 編輯</Button>
+                      <Button variant="outline" size="sm" className="border-[#e1b1a9] text-[#a55045]" onClick={async () => { await onDeleteSubstitute(item.id); onAction("Substitute removed · 職務代理人已刪除"); }}>Delete · 刪除</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       {!isPrimary && (
         <Card className="border-[#e3d7b8] bg-[#fffaf0]">
           <CardContent className="flex items-start gap-3 p-5 text-sm text-[#8b733f]">
@@ -2447,6 +2563,9 @@ function SchoolView({
   ptoSettings,
   teacherProfiles,
   lineGroupSettings,
+  substitutes,
+  onSaveSubstitute,
+  onDeleteSubstitute,
   onSaveLineGroup,
   onSavePto,
   calendarSettings,
@@ -2476,6 +2595,9 @@ function SchoolView({
   makeupDays: MakeupDay[];
   onSaveMakeup: (days: MakeupDay[]) => void;
   onAction: (message: string) => void;
+  substitutes: import("@/lib/supabaseLeave").SupabaseSubstitute[];
+  onSaveSubstitute: (input: { id?: number; school: "青山國小" | "東原國中"; name: string }) => Promise<void>;
+  onDeleteSubstitute: (id: number) => Promise<void>;
   onDecision: (
     applicationId: number | undefined,
     school: string,
@@ -2513,6 +2635,9 @@ function SchoolView({
         ptoSettings={ptoSettings}
         teacherProfiles={teacherProfiles}
         lineGroupSettings={lineGroupSettings}
+        substitutes={substitutes}
+        onSaveSubstitute={onSaveSubstitute}
+        onDeleteSubstitute={onDeleteSubstitute}
         onSaveLineGroup={onSaveLineGroup}
         onSavePto={onSavePto}
         calendarSettings={calendarSettings}
