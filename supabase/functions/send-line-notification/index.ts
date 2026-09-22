@@ -22,6 +22,9 @@ type NotificationRow = {
     leave_type: string;
     reason: string;
     teacher_id: string;
+    start_at: string;
+    end_at: string;
+    total_hours: number;
   };
 };
 
@@ -41,7 +44,7 @@ Deno.serve(async (request) => {
 
     const { data: notification, error: notificationError } = await supabaseAdmin
       .from("foreign_teacher_leave_notifications")
-      .select("id, application_id, recipient_type, recipient_ref, event_type, status, foreign_teacher_leave_applications(application_no, leave_type, reason, teacher_id)")
+      .select("id, application_id, recipient_type, recipient_ref, event_type, status, foreign_teacher_leave_applications(application_no, leave_type, reason, teacher_id, start_at, end_at, total_hours)")
       .eq("id", notificationId)
       .single();
     if (notificationError || !notification) return json({ error: "Notification not found" }, 404);
@@ -57,9 +60,13 @@ Deno.serve(async (request) => {
       return json({ ok: true, status: "Skipped", reason: "Only submissions and cancellations are pushed to school groups" });
     }
     const recipientId = await resolveRecipientId(row);
+    const { data: teacherProfile } = await supabaseAdmin.from("foreign_teacher_profiles").select("name").eq("user_id", row.foreign_teacher_leave_applications.teacher_id).maybeSingle();
+    const application = row.foreign_teacher_leave_applications;
+    const teacherName = teacherProfile?.name || "外籍教師";
+    const dateRange = `${formatDate(application.start_at)} ~ ${formatDate(application.end_at)}`;
     const message = row.event_type === "Cancelled"
-      ? `⚠️ 外師已取消請假申請\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}`
-      : `外師請假通知\n申請編號：${row.foreign_teacher_leave_applications.application_no}\n假別：${row.foreign_teacher_leave_applications.leave_type}\n事由：${row.foreign_teacher_leave_applications.reason}\n狀態：${row.event_type}`;
+      ? `⚠️ 外師已取消請假申請\n姓名：${teacherName}\n學校：${row.recipient_ref}\n申請編號：${application.application_no}\n假別：${application.leave_type}\n日期：${dateRange}\n時數：${application.total_hours} 小時\n事由：${application.reason}`
+      : `外師請假通知\n姓名：${teacherName}\n學校：${row.recipient_ref}\n申請編號：${application.application_no}\n假別：${application.leave_type}\n日期：${dateRange}\n時數：${application.total_hours} 小時\n事由：${application.reason}\n狀態：${row.event_type}`;
     const lineResponse = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { Authorization: `Bearer ${lineToken}`, "Content-Type": "application/json" },
@@ -84,6 +91,17 @@ async function resolveRecipientId(row: NotificationRow) {
   const id = Deno.env.get(envName);
   if (id) return id;
   throw new Error(`${envName} is not configured for ${row.recipient_ref}`);
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function json(body: unknown, status = 200) {

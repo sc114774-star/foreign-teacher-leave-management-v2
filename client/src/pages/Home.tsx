@@ -1532,9 +1532,20 @@ export default function Home() {
                                           setCancellingApplicationId(record.applicationId!);
                                           try {
                                             const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
-                                            await dispatchSupabaseLeaveNotification(cancellation.notification_id);
+                                            let lineFailure: string | null = null;
+                                            try {
+                                              await dispatchSupabaseLeaveNotification(cancellation.notification_id);
+                                            } catch (notificationError) {
+                                              lineFailure = formatSupabaseError(notificationError);
+                                              console.error("[Leave cancellation] LINE notification failed after cancellation succeeded", notificationError);
+                                            }
                                             await supabaseLeaveQuery.refetch();
-                                            handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
+                                            if (lineFailure) {
+                                              handleAction(`Leave application cancelled, but LINE notification failed · 假單已取消、額度已退還，但 LINE 通知失敗\n${lineFailure}`);
+                                              window.alert(`假單已取消，額度已退還，但 LINE 通知發送失敗。\n\n${lineFailure}`);
+                                            } else {
+                                              handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
+                                            }
                                           } catch (error) {
                                             const message = formatSupabaseError(error);
                                             console.error("[Leave cancellation] Supabase error", error);
