@@ -884,6 +884,17 @@ function LeaveCardPrint({
   );
 }
 
+function formatSupabaseError(error: unknown) {
+  if (!error || typeof error !== "object") return String(error ?? "Unknown error");
+  const detail = error as { code?: string; message?: string; details?: string; hint?: string };
+  return [
+    detail.code ? `Code: ${detail.code}` : "",
+    detail.message ? detail.message : "Unknown Supabase error",
+    detail.details ? `Details: ${detail.details}` : "",
+    detail.hint ? `Hint: ${detail.hint}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 export default function Home() {
   const auth = useAuth();
   const supabaseLeaveQuery = useQuery({
@@ -1002,6 +1013,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+  const [cancellingApplicationId, setCancellingApplicationId] = useState<number | null>(null);
 
   useEffect(() => {
     if (makeupQuery.data) {
@@ -1514,20 +1526,27 @@ export default function Home() {
                                         variant="ghost"
                                         size="sm"
                                         className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        disabled={cancellingApplicationId !== null}
                                         onClick={async () => {
                                           if (!window.confirm("Are you sure you want to cancel this leave?")) return;
+                                          setCancellingApplicationId(record.applicationId!);
                                           try {
                                             const cancellation = await cancelSupabaseLeaveApplication(record.applicationId!);
                                             await dispatchSupabaseLeaveNotification(cancellation.notification_id);
                                             await supabaseLeaveQuery.refetch();
                                             handleAction("Leave application cancelled · 假單已取消，額度已退還，LINE 已通知學校");
                                           } catch (error) {
-                                            handleAction(error instanceof Error ? error.message : "Unable to cancel leave application · 無法取消假單");
+                                            const message = formatSupabaseError(error);
+                                            console.error("[Leave cancellation] Supabase error", error);
+                                            handleAction(`Unable to cancel leave application · 無法取消假單\n${message}`);
+                                            window.alert(`Unable to cancel leave application · 無法取消假單\n\n${message}`);
+                                          } finally {
+                                            setCancellingApplicationId(null);
                                           }
                                         }}
                                       >
                                         <X className="mr-2 h-4 w-4" />
-                                        Cancel · 取消
+                                        {cancellingApplicationId === record.applicationId ? "Cancelling…" : "Cancel · 取消"}
                                       </Button>
                                     )}
                                   </div>

@@ -169,6 +169,14 @@ returns public.foreign_teacher_app_role language sql stable security definer set
   select coalesce((select role from public.foreign_teacher_profiles where user_id = auth.uid()), 'teacher'::public.foreign_teacher_app_role);
 $$;
 
+create or replace function public.foreign_teacher_is_teacher()
+returns boolean language sql stable security definer set search_path = public, pg_temp as $$
+  select lower(trim(coalesce((select role::text from public.foreign_teacher_profiles where user_id = auth.uid()), ''))) like '%teacher%'
+    or lower(trim(coalesce(auth.jwt()->'app_metadata'->>'role', ''))) like '%teacher%'
+    or lower(trim(coalesce(auth.jwt()->'user_metadata'->>'role', ''))) like '%teacher%';
+$$;
+grant execute on function public.foreign_teacher_is_teacher() to anon, authenticated;
+
 create or replace function public.foreign_teacher_can_access_application(application_id_input bigint)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -229,7 +237,7 @@ create policy makeup_read_authenticated on public.foreign_teacher_makeup_days fo
 create policy makeup_school_manage on public.foreign_teacher_makeup_days for all to authenticated using (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中')) with check (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中'));
 create policy applications_read_authorized on public.foreign_teacher_leave_applications for select to authenticated using (teacher_id = auth.uid() or public.foreign_teacher_current_role() in ('cingshan','dongyuan','admin'));
 create policy applications_teacher_insert on public.foreign_teacher_leave_applications for insert to authenticated with check (teacher_id = auth.uid() and public.foreign_teacher_current_role() in ('teacher','admin'));
-create policy applications_teacher_update on public.foreign_teacher_leave_applications for update to authenticated using (teacher_id = auth.uid() and public.foreign_teacher_current_role() = 'teacher') with check (teacher_id = auth.uid() and public.foreign_teacher_current_role() = 'teacher' and status = 'Cancelled');
+create policy applications_teacher_update on public.foreign_teacher_leave_applications for update to authenticated using (teacher_id = auth.uid() and public.foreign_teacher_is_teacher()) with check (teacher_id = auth.uid() and public.foreign_teacher_is_teacher() and status = 'Cancelled');
 create policy applications_admin_update on public.foreign_teacher_leave_applications for update to authenticated using (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan')) with check (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan'));
 create policy days_read_authorized on public.foreign_teacher_leave_days for select to authenticated using (public.foreign_teacher_can_access_application(application_id));
 create policy days_insert_owner on public.foreign_teacher_leave_days for insert to authenticated with check (public.foreign_teacher_can_access_application(application_id));
