@@ -2602,7 +2602,7 @@ function SchoolView({
     applicationId: number | undefined,
     school: string,
     decision: "Approved" | "Rejected"
-  ) => void;
+  ) => Promise<void>;
   onPrint: (record: LeaveRecord) => void;
   onCollectionPrint: (records: LeaveRecord[], title: string) => void;
   onPreviewAttachment: (attachment: AttachmentSummary) => void;
@@ -2626,6 +2626,7 @@ function SchoolView({
       setPrintMonth(currentYearMonth());
   }, [availablePrintMonths, printMonth]);
   const [printTerm, setPrintTerm] = useState<"first" | "second">("first");
+  const [decisionPending, setDecisionPending] = useState<number | null>(null);
   const academicYearStart = Number(calendarSettings.contractStart.slice(0, 4));
   if (active === "Settings")
     return (
@@ -2683,6 +2684,15 @@ function SchoolView({
       record.startDate <= termEnd &&
       record.endDate >= termStart
   ).length;
+  const submitDecision = async (record: LeaveRecord, decision: "Approved" | "Rejected") => {
+    if (!record.applicationId || decisionPending !== null) return;
+    setDecisionPending(record.applicationId);
+    try {
+      await onDecision(record.applicationId, school, decision);
+    } finally {
+      setDecisionPending(null);
+    }
+  };
   return (
     <>
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -2826,30 +2836,20 @@ function SchoolView({
                             size="sm"
                             variant="outline"
                             className="rounded-lg border-[#e1b1a9] text-[#a55045]"
-                            onClick={() =>
-                              onDecision(
-                                record.applicationId,
-                                school,
-                                "Rejected"
-                              )
-                            }
+                            disabled={decisionPending !== null}
+                            onClick={() => void submitDecision(record, "Rejected")}
                           >
                             <X className="mr-1 h-3.5 w-3.5" />
-                            Reject
+                            {decisionPending === record.applicationId ? "Updating…" : "Reject"}
                           </Button>
                           <Button
                             size="sm"
                             className="rounded-lg bg-[#52775b] hover:bg-[#41644f]"
-                            onClick={() =>
-                              onDecision(
-                                record.applicationId,
-                                school,
-                                "Approved"
-                              )
-                            }
+                            disabled={decisionPending !== null}
+                            onClick={() => void submitDecision(record, "Approved")}
                           >
                             <Check className="mr-1 h-3.5 w-3.5" />
-                            Approve
+                            {decisionPending === record.applicationId ? "Updating…" : "Approve"}
                           </Button>
                         </div>
                       ) : record.status === "Pending" ? (

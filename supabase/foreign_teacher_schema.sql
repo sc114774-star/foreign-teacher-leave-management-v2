@@ -10,10 +10,10 @@ create extension if not exists pgcrypto;
 
 create type public.foreign_teacher_app_role as enum ('teacher', 'cingshan', 'dongyuan', 'admin');
 create type public.foreign_teacher_leave_type as enum ('PTO', 'Sick Leave', 'Personal Leave', 'Official Leave', 'Make-up Leave');
-create type public.foreign_teacher_leave_status as enum ('Pending', 'Approved', 'Rejected');
+create type public.foreign_teacher_leave_status as enum ('Pending', 'Approved', 'Rejected', 'Cancelled');
 create type public.foreign_teacher_approval_decision as enum ('Approved', 'Rejected');
 create type public.foreign_teacher_notification_recipient as enum ('SchoolMailbox', 'Teacher');
-create type public.foreign_teacher_notification_event as enum ('Submitted', 'Approved', 'Rejected');
+create type public.foreign_teacher_notification_event as enum ('Submitted', 'Approved', 'Rejected', 'Cancelled');
 create type public.foreign_teacher_notification_status as enum ('Queued', 'Sent', 'Failed');
 
 create table public.foreign_teacher_profiles (
@@ -123,7 +123,8 @@ create table public.foreign_teacher_leave_approvals (
   approver_id uuid not null references auth.users(id),
   decision public.foreign_teacher_approval_decision not null,
   note text,
-  decided_at timestamptz not null default now()
+  decided_at timestamptz not null default now(),
+  unique (application_id, school)
 );
 
 create table public.foreign_teacher_leave_routing_events (
@@ -218,6 +219,8 @@ alter table public.foreign_teacher_pto_settings enable row level security;
 alter table public.foreign_teacher_line_group_settings enable row level security;
 
 create policy profiles_self_read on public.foreign_teacher_profiles for select to authenticated using (user_id = auth.uid());
+grant select on public.foreign_teacher_profiles to anon, authenticated;
+create policy profiles_public_login_read on public.foreign_teacher_profiles for select to anon, authenticated using (true);
 create policy profiles_admin_manage on public.foreign_teacher_profiles for all to authenticated using (public.foreign_teacher_current_role() = 'admin') with check (public.foreign_teacher_current_role() = 'admin');
 create policy profiles_school_read on public.foreign_teacher_profiles for select to authenticated using (public.foreign_teacher_current_role() in ('cingshan','admin'));
 create policy calendar_read_authenticated on public.foreign_teacher_school_calendar_settings for select to authenticated using (true);
@@ -226,6 +229,7 @@ create policy makeup_read_authenticated on public.foreign_teacher_makeup_days fo
 create policy makeup_school_manage on public.foreign_teacher_makeup_days for all to authenticated using (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中')) with check (public.foreign_teacher_current_role() = 'admin' or (public.foreign_teacher_current_role() = 'cingshan' and assigned_school = '青山國小') or (public.foreign_teacher_current_role() = 'dongyuan' and assigned_school = '東原國中'));
 create policy applications_read_authorized on public.foreign_teacher_leave_applications for select to authenticated using (teacher_id = auth.uid() or public.foreign_teacher_current_role() in ('cingshan','dongyuan','admin'));
 create policy applications_teacher_insert on public.foreign_teacher_leave_applications for insert to authenticated with check (teacher_id = auth.uid() and public.foreign_teacher_current_role() in ('teacher','admin'));
+create policy applications_teacher_update on public.foreign_teacher_leave_applications for update to authenticated using (teacher_id = auth.uid() and public.foreign_teacher_current_role() = 'teacher') with check (teacher_id = auth.uid() and public.foreign_teacher_current_role() = 'teacher' and status = 'Cancelled');
 create policy applications_admin_update on public.foreign_teacher_leave_applications for update to authenticated using (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan')) with check (public.foreign_teacher_current_role() in ('admin','cingshan','dongyuan'));
 create policy days_read_authorized on public.foreign_teacher_leave_days for select to authenticated using (public.foreign_teacher_can_access_application(application_id));
 create policy days_insert_owner on public.foreign_teacher_leave_days for insert to authenticated with check (public.foreign_teacher_can_access_application(application_id));

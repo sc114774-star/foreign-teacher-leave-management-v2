@@ -24,6 +24,7 @@ export type SupabaseLeaveAttachment = { id: number; application_id: number; file
 export type SupabaseLeaveBalance = { id: number; teacher_id: string; academic_year: string; leave_type: SupabaseLeaveApplication["leave_type"]; total_hours: number; approved_used_hours: number };
 export type SupabasePtoSetting = { id: number; teacher_id: string; academic_year: string; total_days: number; updated_by: string; created_at: string; updated_at: string };
 export type SupabaseTeacherProfile = { user_id: string; name: string | null; email: string | null; role: "teacher" | "cingshan" | "dongyuan" | "admin" };
+export type SupabaseLoginProfile = Pick<SupabaseTeacherProfile, "user_id" | "name" | "email" | "role">;
 export type SupabaseMakeupDay = { id: number; academic_year: string; makeup_date: string; source_date: string | null; assigned_school: "青山國小" | "東原國中"; note: string | null; created_by: string; created_at: string; updated_at: string };
 export type SupabaseLineGroupSetting = { school: "青山國小" | "東原國中"; group_id: string; updated_by: string; updated_at: string };
 export type SupabaseSubstitute = { id: number; school: "青山國小" | "東原國中"; name: string; created_by: string; created_at: string; updated_at: string };
@@ -121,6 +122,18 @@ export async function fetchSupabaseTeacherProfiles() {
   return result.data as unknown as SupabaseTeacherProfile[];
 }
 
+export async function fetchSupabaseLoginProfiles() {
+  const client = requireClient();
+  const result = await client
+    .from("foreign_teacher_profiles")
+    .select("user_id, name, email, role")
+    .in("role", ["teacher", "cingshan", "dongyuan"])
+    .not("email", "is", null)
+    .order("name", { ascending: true });
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseLoginProfile[];
+}
+
 export async function fetchSupabasePtoSettings(academicYear: string, teacherId?: string) {
   const client = requireClient();
   let query = client.from("foreign_teacher_pto_settings").select("*").eq("academic_year", academicYear);
@@ -157,7 +170,11 @@ export async function decideSupabaseLeaveApplication(input: SupabaseLeaveDecisio
   if (!days.data.length || days.data.some((day) => day.assigned_school !== input.school)) throw new Error("Application is not assigned to this school");
   const update = await client.from("foreign_teacher_leave_applications").update({ status: input.decision }).eq("id", input.application_id).eq("status", "Pending");
   if (update.error) throw update.error;
-  const approval = await client.from("foreign_teacher_leave_approvals").insert({ application_id: input.application_id, school: input.school, approver_id: auth.user.id, decision: input.decision, note: input.note ?? null });
+  const approvalTable = client.from("foreign_teacher_leave_approvals");
+  const approvalPayload = { application_id: input.application_id, school: input.school, approver_id: auth.user.id, decision: input.decision, note: input.note ?? null };
+  const approval = typeof (approvalTable as { upsert?: unknown }).upsert === "function"
+    ? await (approvalTable as typeof approvalTable & { upsert: (payload: typeof approvalPayload, options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(approvalPayload, { onConflict: "application_id,school" })
+    : await approvalTable.insert(approvalPayload);
   if (approval.error) throw approval.error;
   return { applicationId: input.application_id, decision: input.decision };
 }
