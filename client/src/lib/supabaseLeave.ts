@@ -183,7 +183,24 @@ export async function cancelSupabaseLeaveApplication(applicationId: number) {
   const client = requireClient();
   const { data, error } = await client.rpc("foreign_teacher_cancel_leave_application", { p_application_id: applicationId });
   if (error) throw error;
-  return data as { application_id: number; status: "Deleted"; notification_id: null };
+  const result = data as { application_id: number; status: "Deleted"; notification_id: null; storage_keys?: string[] };
+
+  // The RPC only deletes DB metadata (direct SQL DELETE on storage.objects
+  // is blocked by Supabase). Remove the actual attachment files separately
+  // via the Storage API. Best-effort: the application record is already
+  // gone at this point, so a storage cleanup failure shouldn't surface as
+  // a cancellation error to the teacher.
+  if (result.storage_keys?.length) {
+    try {
+      await client.functions.invoke("delete-leave-attachments", {
+        body: { storage_keys: result.storage_keys },
+      });
+    } catch (cleanupError) {
+      console.error("[cancelSupabaseLeaveApplication] Attachment cleanup failed", cleanupError);
+    }
+  }
+
+  return result;
 }
 
 export async function dispatchSupabaseLeaveNotification(notificationId: number) {
