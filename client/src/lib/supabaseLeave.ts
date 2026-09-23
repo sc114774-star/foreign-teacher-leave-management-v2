@@ -176,7 +176,6 @@ export async function decideSupabaseLeaveApplication(input: SupabaseLeaveDecisio
     ? await (approvalTable as typeof approvalTable & { upsert: (payload: typeof approvalPayload, options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(approvalPayload, { onConflict: "application_id,school" })
     : await approvalTable.insert(approvalPayload);
   if (approval.error) throw approval.error;
-  void notifyLineByApplicationId(input.decision === "Approved" ? "approved" : "rejected", input.application_id, input.school);
   return { applicationId: input.application_id, decision: input.decision };
 }
 
