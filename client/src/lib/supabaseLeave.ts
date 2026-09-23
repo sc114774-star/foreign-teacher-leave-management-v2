@@ -176,21 +176,11 @@ export async function decideSupabaseLeaveApplication(input: SupabaseLeaveDecisio
     ? await (approvalTable as typeof approvalTable & { upsert: (payload: typeof approvalPayload, options: { onConflict: string }) => Promise<{ error: Error | null }> }).upsert(approvalPayload, { onConflict: "application_id,school" })
     : await approvalTable.insert(approvalPayload);
   if (approval.error) throw approval.error;
+  if (input.decision === "Approved") void notifyLineByApplicationId("approved", input.application_id, input.school);
   return { applicationId: input.application_id, decision: input.decision };
 }
 
-export async function cancelSupabaseLeaveApplication(
-  applicationId: number,
-  notificationDetails?: {
-    school: string;
-    teacherName: string;
-    leaveDate: string;
-    leaveType: string;
-    applicationNo: string;
-    totalHours: number;
-    reason: string;
-  },
-) {
+export async function cancelSupabaseLeaveApplication(applicationId: number) {
   const client = requireClient();
   const { data, error } = await client.rpc("foreign_teacher_cancel_leave_application", { p_application_id: applicationId });
   if (error) throw error;
@@ -211,16 +201,13 @@ export async function cancelSupabaseLeaveApplication(
     }
   }
 
-  // The application row is gone by now, so the LINE message must be built
-  // from a snapshot the caller took before cancelling, not looked up here.
-  if (notificationDetails) void notifyLineCancellation(notificationDetails);
-
+  // Teacher-side actions (submit/cancel) never push to LINE — only the
+  // school side approving does. See notifyLineByApplicationId above.
   return result;
 }
 
-// Best-effort: a LINE push failure should never block the submit/approve/
-// reject/cancel action it's attached to, so every caller swallows errors
-// here and just logs them.
+// Best-effort: a LINE push failure should never block the action it's
+// attached to, so the caller swallows errors here and just logs them.
 async function notifyLine(body: Record<string, unknown>) {
   try {
     const client = requireClient();
@@ -237,20 +224,8 @@ async function notifyLine(body: Record<string, unknown>) {
   }
 }
 
-export async function notifyLineByApplicationId(action: "submit" | "approved" | "rejected", applicationId: number, school?: string) {
+export async function notifyLineByApplicationId(action: "approved", applicationId: number, school?: string) {
   return notifyLine({ action, application_id: applicationId, school });
-}
-
-export async function notifyLineCancellation(details: {
-  school: string;
-  teacherName: string;
-  leaveDate: string;
-  leaveType: string;
-  applicationNo: string;
-  totalHours: number;
-  reason: string;
-}) {
-  return notifyLine({ action: "cancel", ...details });
 }
 
 export async function uploadSupabaseLeaveAttachment(applicationId: number, file: File): Promise<SupabaseLeaveAttachment> {
@@ -276,6 +251,5 @@ export async function createSupabaseLeaveApplication(input: Omit<SupabaseLeaveAp
   if (!assignedSchool || foreign_teacher_leave_days.some((day) => day.assigned_school !== assignedSchool)) throw new Error("A leave application must route to one school");
   const notification = await client.from("foreign_teacher_leave_notifications").insert({ application_id: inserted.data.id, recipient_type: "SchoolMailbox", recipient_ref: assignedSchool, event_type: "Submitted", channel: "LINE", status: "Queued" });
   if (notification.error) throw notification.error;
-  void notifyLineByApplicationId("submit", inserted.data.id, assignedSchool);
   return inserted.data.id as number;
 }
