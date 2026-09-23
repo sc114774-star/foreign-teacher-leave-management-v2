@@ -1533,7 +1533,15 @@ export default function Home() {
                                           if (!window.confirm("Are you sure you want to cancel this leave?")) return;
                                           setCancellingApplicationId(record.applicationId!);
                                           try {
-                                            await cancelSupabaseLeaveApplication(record.applicationId!);
+                                            await cancelSupabaseLeaveApplication(record.applicationId!, {
+                                              school: record.school,
+                                              teacherName: displayName,
+                                              leaveDate: record.dates,
+                                              leaveType: record.typeZh,
+                                              applicationNo: record.id,
+                                              totalHours: record.hours,
+                                              reason: record.reason,
+                                            });
                                             await supabaseLeaveQuery.refetch();
                                             handleAction("Leave application deleted · 假單已刪除，額度已退還，歷史紀錄已移除");
                                           } catch (error) {
