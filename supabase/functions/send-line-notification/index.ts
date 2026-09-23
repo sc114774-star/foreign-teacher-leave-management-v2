@@ -11,7 +11,13 @@ const lineToken = Deno.env.get("LINE_CHANNEL_ACCESS_TOKEN");
 const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
 type NotifyPayload = {
-  action?: "submit" | "cancel" | string;
+  action?: "submit" | "approved" | "rejected" | "cancel" | string;
+  // Lookup mode: pass application_id and the function fetches the rest
+  // server-side (used for submit/approve/reject, while the application row
+  // still exists).
+  application_id?: number;
+  // Snapshot mode: pass the fields directly (required for cancel, since the
+  // application row has already been deleted by that point).
   school?: string;
   teacherName?: string;
   leaveDate?: string; // single date or a "start ~ end" style range, already formatted or ISO
@@ -45,7 +51,45 @@ Deno.serve(async (request) => {
       return json({ success: false, error: "Invalid JSON body" }, 400);
     }
 
-    const { action, school, teacherName, leaveDate, leaveType, applicationNo, totalHours, reason } = payload;
+    let { action, school, teacherName, leaveDate, leaveType, applicationNo, totalHours, reason } = payload;
+
+    // --- Lookup mode: resolve the rest of the fields from the DB ---
+    if (payload.application_id) {
+      const { data: application, error: appError } = await supabaseAdmin
+        .from("foreign_teacher_leave_applications")
+        .select("application_no, leave_type, reason, teacher_id, start_at, end_at, total_hours")
+        .eq("id", payload.application_id)
+        .single();
+      if (appError || !application) {
+        console.error("[send-line-notification] Application lookup failed", {
+          applicationId: payload.application_id,
+          error: appError,
+        });
+        return json({ success: false, error: "Application not found" }, 200);
+      }
+      if (!school) {
+        const { data: day } = await supabaseAdmin
+          .from("foreign_teacher_leave_days")
+          .select("assigned_school")
+          .eq("application_id", payload.application_id)
+          .limit(1)
+          .maybeSingle();
+        school = day?.assigned_school;
+      }
+      const { data: profile } = await supabaseAdmin
+        .from("foreign_teacher_profiles")
+        .select("name")
+        .eq("user_id", application.teacher_id)
+        .maybeSingle();
+      teacherName = profile?.name || teacherName;
+      applicationNo = application.application_no;
+      leaveType = application.leave_type;
+      reason = application.reason;
+      totalHours = application.total_hours;
+      leaveDate = application.start_at === application.end_at
+        ? application.start_at
+        : `${formatMaybeDate(application.start_at)} ~ ${formatMaybeDate(application.end_at)}`;
+    }
 
     if (!school) {
       return json({ success: false, error: "school is required" }, 400);
@@ -81,6 +125,8 @@ Deno.serve(async (request) => {
       lines.push(`時數：${totalHours} 小時`);
     }
     if (reason) lines.push(`事由：${reason}`);
+    const statusLabel: Record<string, string> = { submit: "Submitted", approved: "Approved", rejected: "Rejected" };
+    if (!isCancel && action && statusLabel[action]) lines.push(`狀態：${statusLabel[action]}`);
     const message = lines.join("\n");
 
     // --- Direct, synchronous push to LINE ---
