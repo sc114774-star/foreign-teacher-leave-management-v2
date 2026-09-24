@@ -2352,7 +2352,6 @@ function SchoolSettings({
           </CardContent>
         </Card>
       )}
-      </Card>
       <Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]">
         <CardHeader>
           <CardTitle className="text-lg">
