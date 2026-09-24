@@ -152,6 +152,39 @@ export async function upsertSupabasePtoSetting(input: { teacherId: string; acade
   return result.data as unknown as SupabasePtoSetting;
 }
 
+export type SupabaseTeacherContract = {
+  teacher_id: string;
+  contract_start: string;
+  contract_end: string;
+  updated_by: string;
+  updated_at: string;
+};
+
+export async function fetchSupabaseTeacherContract(teacherId?: string) {
+  const client = requireClient();
+  let query = client.from("foreign_teacher_contracts").select("*");
+  query = teacherId ? query.eq("teacher_id", teacherId) : query;
+  const result = teacherId ? await query.maybeSingle() : await query.order("teacher_id", { ascending: true });
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseTeacherContract | SupabaseTeacherContract[] | null;
+}
+
+export async function upsertSupabaseTeacherContract(input: { teacherId: string; contractStart: string; contractEnd: string }) {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) throw new Error("Supabase Auth session is required");
+  const result = await client
+    .from("foreign_teacher_contracts")
+    .upsert(
+      { teacher_id: input.teacherId, contract_start: input.contractStart, contract_end: input.contractEnd, updated_by: auth.user.id },
+      { onConflict: "teacher_id" },
+    )
+    .select("*")
+    .single();
+  if (result.error) throw result.error;
+  return result.data as unknown as SupabaseTeacherContract;
+}
+
 export async function getSupabaseAttachmentUrl(applicationId: number, attachmentId: number, expiresIn = 300): Promise<SupabaseSignedAttachment> {
   const client = requireClient();
   const attachment = await client.from("foreign_teacher_leave_attachments").select("id, file_name, mime_type, storage_key").eq("id", attachmentId).eq("application_id", applicationId).single();
