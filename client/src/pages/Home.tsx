@@ -88,14 +88,18 @@ import {
 } from "@shared/printFilters";
 import LeaveBalancePanel from "@/components/LeaveBalancePanel";
 import PtoSettingsPanel from "@/components/PtoSettingsPanel";
+import ContractSettingsPanel from "@/components/ContractSettingsPanel";
 import LineGroupSettingsPanel from "@/components/LineGroupSettingsPanel";
 import PrintLayout from "@/components/PrintLayout";
 import {
   fetchSupabaseLineGroupSettings,
   fetchSupabasePtoSettings,
   fetchSupabaseTeacherProfiles,
+  fetchSupabaseTeacherContract,
   upsertSupabaseLineGroupSetting,
   upsertSupabasePtoSetting,
+  upsertSupabaseTeacherContract,
+  type SupabaseTeacherContract,
 } from "@/lib/supabaseLeave";
 import {
   academicYearForDate,
@@ -933,11 +937,24 @@ export default function Home() {
         : current;
     }
   );
-  const academicYear = academicYearForDate(calendarSettings.contractStart);
+  const ownContractQuery = useQuery({
+    queryKey: ["supabase", "own-contract", auth.user?.id],
+    queryFn: () => fetchSupabaseTeacherContract(auth.user?.id) as Promise<SupabaseTeacherContract | null>,
+    enabled: role === "teacher" && Boolean(auth.user) && auth.supabaseConfigured,
+    retry: false,
+  });
+  // The real, per-teacher contract now lives in the database
+  // (foreign_teacher_contracts). calendarSettings.contractStart/End stays as
+  // a local fallback only for the vacation-period editor and for roles that
+  // don't have a contract row yet.
+  const dbContract = role === "teacher" ? ownContractQuery.data : undefined;
+  const effectiveContractStart = dbContract?.contract_start ?? calendarSettings.contractStart;
+  const effectiveContractEnd = dbContract?.contract_end ?? calendarSettings.contractEnd;
+  const academicYear = academicYearForDate(effectiveContractStart);
   const contractDays =
     Math.round(
-      (new Date(`${calendarSettings.contractEnd}T12:00:00`).getTime() -
-        new Date(`${calendarSettings.contractStart}T12:00:00`).getTime()) /
+      (new Date(`${effectiveContractEnd}T12:00:00`).getTime() -
+        new Date(`${effectiveContractStart}T12:00:00`).getTime()) /
         86400000
     ) + 1;
   const ptoSettingsQuery = useQuery({
@@ -954,6 +971,12 @@ export default function Home() {
     queryKey: ["supabase", "teacher-profiles"],
     queryFn: fetchSupabaseTeacherProfiles,
     enabled: role === "cingshan" && auth.supabaseConfigured,
+    retry: false,
+  });
+  const allContractsQuery = useQuery({
+    queryKey: ["supabase", "all-contracts"],
+    queryFn: () => fetchSupabaseTeacherContract() as Promise<SupabaseTeacherContract[]>,
+    enabled: role !== "teacher" && auth.supabaseConfigured,
     retry: false,
   });
   const lineGroupSettingsQuery = useQuery({
@@ -1301,7 +1324,7 @@ export default function Home() {
                       icon={CalendarDays}
                       label="Contract period"
                       value={`${contractDays} 日 / ${contractDays} days`}
-                      helper={`合約期間 · ${formatDate(calendarSettings.contractStart)} — ${formatDate(calendarSettings.contractEnd)}`}
+                      helper={`合約期間 · ${formatDate(effectiveContractStart)} — ${formatDate(effectiveContractEnd)}`}
                       tone="bg-[#e9e5f2] text-[#72628f]"
                     />
                     <MetricCard
@@ -1335,8 +1358,8 @@ export default function Home() {
                           Contract period
                         </p>
                         <p className="mt-5 text-2xl font-semibold">
-                          {formatDate(calendarSettings.contractStart)} —{" "}
-                          {formatDate(calendarSettings.contractEnd)}
+                          {formatDate(effectiveContractStart)} —{" "}
+                          {formatDate(effectiveContractEnd)}
                         </p>
                         <div className="mt-8 flex items-end justify-between">
                           <div>
@@ -1590,6 +1613,11 @@ export default function Home() {
                     totalDays,
                   });
                   await ptoSettingsQuery.refetch();
+                }}
+                contracts={allContractsQuery.data ?? []}
+                onSaveContract={async (teacherId, contractStart, contractEnd) => {
+                  await upsertSupabaseTeacherContract({ teacherId, contractStart, contractEnd });
+                  await allContractsQuery.refetch();
                 }}
                 calendarSettings={calendarSettings}
                 onSaveSettings={setCalendarSettings}
@@ -2165,6 +2193,8 @@ function SchoolSettings({
   onDeleteSubstitute,
   onSaveLineGroup,
   onSavePto,
+  contracts,
+  onSaveContract,
   calendarSettings,
   onSaveSettings,
   makeupDays,
@@ -2181,6 +2211,8 @@ function SchoolSettings({
     groupId: string
   ) => Promise<void>;
   onSavePto: (teacherId: string, totalDays: number) => Promise<void>;
+  contracts: SupabaseTeacherContract[];
+  onSaveContract: (teacherId: string, contractStart: string, contractEnd: string) => Promise<void>;
   calendarSettings: CalendarSettings;
   onSaveSettings: (settings: CalendarSettings) => void;
   makeupDays: MakeupDay[];
@@ -2195,10 +2227,8 @@ function SchoolSettings({
   const schoolSubstitutes = substitutes.filter(item => item.school === managedSchool);
   const [substituteName, setSubstituteName] = useState("");
   const [editingSubstituteId, setEditingSubstituteId] = useState<number | undefined>();
-  const [contractStart, setContractStart] = useState(
-    calendarSettings.contractStart
-  );
-  const [contractEnd, setContractEnd] = useState(calendarSettings.contractEnd);
+  const contractStart = calendarSettings.contractStart;
+  const contractEnd = calendarSettings.contractEnd;
   const [summerStart, setSummerStart] = useState(
     calendarSettings.vacationPeriods[0]?.start ?? "2025-07-01"
   );
@@ -2242,6 +2272,13 @@ function SchoolSettings({
         settings={ptoSettings}
         canEdit={isPrimary}
         onSave={onSavePto}
+        onAction={onAction}
+      />
+      <ContractSettingsPanel
+        teachers={teacherProfiles}
+        contracts={contracts}
+        canEdit={isPrimary}
+        onSave={onSaveContract}
         onAction={onAction}
       />
       <LineGroupSettingsPanel
@@ -2315,34 +2352,6 @@ function SchoolSettings({
           </CardContent>
         </Card>
       )}
-      <Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]">
-        <CardHeader>
-          <CardTitle className="text-lg">
-            本年度計畫合約期間 · Contract period
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2 text-sm font-medium text-[#58655d]">
-            開始日期 · Start date
-            <Input
-              type="date"
-              value={contractStart}
-              disabled={!isPrimary}
-              onChange={e => setContractStart(e.target.value)}
-              className="h-11 bg-white"
-            />
-          </label>
-          <label className="space-y-2 text-sm font-medium text-[#58655d]">
-            結束日期 · End date
-            <Input
-              type="date"
-              value={contractEnd}
-              disabled={!isPrimary}
-              onChange={e => setContractEnd(e.target.value)}
-              className="h-11 bg-white"
-            />
-          </label>
-        </CardContent>
       </Card>
       <Card className="border-0 bg-white/85 shadow-[0_12px_35px_rgba(81,73,58,0.07)]">
         <CardHeader>
@@ -2588,6 +2597,8 @@ function SchoolView({
   onDeleteSubstitute,
   onSaveLineGroup,
   onSavePto,
+  contracts,
+  onSaveContract,
   calendarSettings,
   onSaveSettings,
   makeupDays,
@@ -2610,6 +2621,8 @@ function SchoolView({
     groupId: string
   ) => Promise<void>;
   onSavePto: (teacherId: string, totalDays: number) => Promise<void>;
+  contracts: SupabaseTeacherContract[];
+  onSaveContract: (teacherId: string, contractStart: string, contractEnd: string) => Promise<void>;
   calendarSettings: CalendarSettings;
   onSaveSettings: (settings: CalendarSettings) => void;
   makeupDays: MakeupDay[];
@@ -2647,7 +2660,7 @@ function SchoolView({
   }, [availablePrintMonths, printMonth]);
   const [printTerm, setPrintTerm] = useState<"first" | "second">("first");
   const [decisionPending, setDecisionPending] = useState<number | null>(null);
-  const academicYearStart = Number(calendarSettings.contractStart.slice(0, 4));
+  const academicYearStart = Number(academicYear.slice(0, 4));
   if (active === "Settings")
     return (
       <SchoolSettings
@@ -2661,6 +2674,8 @@ function SchoolView({
         onDeleteSubstitute={onDeleteSubstitute}
         onSaveLineGroup={onSaveLineGroup}
         onSavePto={onSavePto}
+        contracts={contracts}
+        onSaveContract={onSaveContract}
         calendarSettings={calendarSettings}
         onSaveSettings={onSaveSettings}
         makeupDays={makeupDays}
