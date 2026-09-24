@@ -106,7 +106,7 @@ import {
   calculateLeaveBalance,
   type BalanceRecord,
 } from "@shared/leaveBalanceRules";
-import { currentYearMonth, mergePrintMonths } from "@shared/printMonths";
+import { currentYearMonth, academicYearMonths } from "@shared/printMonths";
 
 type Role = "teacher" | "cingshan" | "dongyuan";
 type LeaveStatus = "Pending" | "Approved" | "Rejected" | "Cancelled";
@@ -2639,6 +2639,7 @@ function SchoolView({
   onCollectionPrint: (records: LeaveRecord[], title: string) => void;
   onPreviewAttachment: (attachment: AttachmentSummary) => void;
 }) {
+  const academicYearStart = Number(academicYear.slice(0, 4));
   const availablePrintMonths = useMemo(() => {
     const recordMonths = records.flatMap(record => {
       const months: string[] = [];
@@ -2650,8 +2651,12 @@ function SchoolView({
       }
       return months;
     });
-    return mergePrintMonths(recordMonths);
-  }, [records]);
+    // Bounded to the academic year (Aug–Jul) derived from the contract,
+    // rather than an arbitrary "today ± N months" rolling window — that's
+    // why 2025/09 or 2027/03 used to show up regardless of any real
+    // contract or leave record.
+    return Array.from(new Set([...recordMonths, ...academicYearMonths(academicYearStart)])).sort((a, b) => b.localeCompare(a));
+  }, [records, academicYearStart]);
   const [printMonth, setPrintMonth] = useState(() => currentYearMonth());
   useEffect(() => {
     if (!availablePrintMonths.includes(printMonth))
@@ -2659,7 +2664,6 @@ function SchoolView({
   }, [availablePrintMonths, printMonth]);
   const [printTerm, setPrintTerm] = useState<"first" | "second">("first");
   const [decisionPending, setDecisionPending] = useState<number | null>(null);
-  const academicYearStart = Number(academicYear.slice(0, 4));
   if (active === "Settings")
     return (
       <SchoolSettings
